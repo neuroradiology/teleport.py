@@ -39,9 +39,9 @@ deep_schema = {
         ]
     }
 }
-array_normalizer = Schema.normalize(array_schema)
-object_normalizer = Schema.normalize(object_schema)
-deep_normalizer = Schema.normalize(deep_schema)
+array_normalizer = normalize_schema(array_schema)
+object_normalizer = normalize_schema(object_schema)
+deep_normalizer = normalize_schema(deep_schema)
 
 class TestSchema(TestCase):
 
@@ -53,26 +53,26 @@ class TestSchema(TestCase):
         s = deepcopy(array_schema)
         s["properties"] = object_schema["properties"]
         with self.assertRaisesRegexp(ValidationError, "Unexpected properties"):
-            Schema.normalize(s)
+            normalize_schema(s)
         # array with properties
         s = deepcopy(object_schema)
         s["items"] = array_schema["items"]
         with self.assertRaisesRegexp(ValidationError, "Unexpected properties"):
-            Schema.normalize(s)
+            normalize_schema(s)
 
     def test_schema_duplicate_properties(self):
         s = deepcopy(object_schema)
         s["properties"][1]["name"] = "foo"
         with self.assertRaisesRegexp(ValidationError, "Duplicate properties"):
-            Schema.normalize(s)
+            normalize_schema(s)
 
     def test_schema_not_object(self):
         with self.assertRaisesRegexp(ValidationError, "Invalid schema: True"):
-            Schema.normalize(True)
+            normalize_schema(True)
 
     def test_schema_unknown_type(self):
         with self.assertRaisesRegexp(ValidationError, "Unknown type"):
-            Schema.normalize({"type": "number"})
+            normalize_schema({"type": "number"})
 
     def test_deep_schema_validation_stack(self):
         # Test Python representatioon
@@ -175,7 +175,7 @@ class TestModel(TestCase):
     def setUp(self):
 
         class Truth(Model):
-            schema = Schema.normalize({"type": "boolean"})
+            schema = normalize_schema({"type": "boolean"})
 
             @classmethod
             def validate(cls, datum):
@@ -199,9 +199,9 @@ class TestClassModel(TestCase):
     def setUp(self):
         class RecipeModel(ClassModel):
             properties = [
-                prop("author", Schema.normalize({"type": "string"})),
-                prop("spicy", Schema.normalize({"type": "boolean"})),
-                prop("meta", Schema.normalize({"type": "json"}))
+                prop("author", normalize_schema({"type": "string"})),
+                prop("spicy", normalize_schema({"type": "boolean"})),
+                prop("meta", normalize_schema({"type": "json"}))
             ]
 
         self.RecipeModel = RecipeModel
@@ -317,49 +317,4 @@ class TestNormalizeSerializeJSON(TestCase):
         self.assertEqual(serialize_json(array_normalizer, arr).data, arr)
         self.assertEqual(serialize_json(None, None), None)
 
-
-class TestCustomType(TestCase):
-
-    def setUp(self):
-
-        class FrenchBoolean(Model):
-
-            @classmethod
-            def normalize(cls, datum):
-                return {"Oui": True, "Non": False}[datum]
-
-            @classmethod
-            def serialize(cls, datum):
-                return {True: "Oui", False: "Non"}[datum]
-
-        def fetcher(name):
-            if name == "test.FrenchBoolean":
-                return FrenchBoolean
-            raise ValidationError("Unknown model")
-
-        self.FrenchBoolean = FrenchBoolean
-        self.fetcher = fetcher
-
-    def test_resolve(self):
-        s = Schema.normalize({"type": "test.FrenchBoolean"})
-        self.assertEqual(s.__class__, SimpleSchema)
-        self.assertEqual(s.model_cls, None)
-        s.resolve(self.fetcher)
-        self.assertEqual(s.model_cls, self.FrenchBoolean)
-        self.assertEqual(s.normalize_data("Oui"), True)
-
-    def test_resolve_recursive(self):
-        s = Schema.normalize({
-            "type": "object",
-            "properties": [
-                prop("a", {
-                    "type": "array",
-                    "items": {
-                        "type": "test.FrenchBoolean"
-                    }
-                })
-            ]
-        })
-        s.resolve(self.fetcher)
-        self.assertEqual(s.normalize_data({"a": ["Oui"]}), {"a": [True]})
 

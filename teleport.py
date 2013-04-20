@@ -104,16 +104,57 @@ class Model(BaseModel):
         return cls.schema
 
 
+def normalize_schema(datum):
+    # Peek into the object before letting the real models
+    # do proper validation
+    if type(datum) != dict or "type" not in datum.keys():
+        raise ValidationError("Invalid schema", datum)
+    st = datum["type"]
+
+    # Simple model?
+    simple = [
+        IntegerModel,
+        FloatModel,
+        StringModel,
+        BinaryModel,
+        BooleanModel,
+        JSONData,
+        Schema
+    ]
+    for simple_cls in simple:
+        if st == simple_cls.match_type:
+            schema = Schema({"type": st})
+            schema.match_type = simple_cls.match_type
+            schema.model_cls = simple_cls
+            return schema
+
+    comp = [
+        ArraySchema,
+        ObjectSchema
+    ]
+
+    for simple_cls in comp:
+        if st == simple_cls.match_type:
+            return simple_cls.normalize(datum)
+
+    # Model?
+    if '.' in st:
+        schema = Schema({"type": st})
+        schema.match_type = st
+        schema.model_cls = None
+        return schema
+
+    raise ValidationError("Unknown type", st)
+
+
 
 class Schema(Model):
     match_type = "schema"
 
-    def __init__(self, data=None, **kwargs):
+    def __init__(self, data=None):
         # It is okay to omit type in the constructor, the Schema
         # will know its type from the match_type attibute
-        if data == None:
-            data = {u"type": self.match_type}
-        super(Schema, self).__init__(data, **kwargs)
+        super(Schema, self).__init__(data)
         # Everything except for the type becomes an option
         self.opts = self.data.copy()
         self.opts.pop("type", None)
@@ -125,82 +166,22 @@ class Schema(Model):
 
 
     def normalize_data(self, datum):
+        if self.model_cls == Schema:
+            return normalize_schema(datum)
         return self.model_cls.normalize(datum, **self.opts)
 
     def serialize_data(self, datum):
         return self.model_cls.serialize(datum, **self.opts)
 
     @classmethod
-    def normalize(cls, datum):
-
-        # Peek into the object before letting the real models
-        # do proper validation
-        if type(datum) != dict or "type" not in datum.keys():
-            raise ValidationError("Invalid schema", datum)
-        st = datum["type"]
-
-        # Simple model?
-        simple = [
-            IntegerModel,
-            FloatModel,
-            StringModel,
-            BinaryModel,
-            BooleanModel,
-            JSONData,
-            Schema
-        ]
-        for simple_cls in simple:
-            if st == simple_cls.match_type:
-                schema = SimpleSchema({"type": st})
-                schema.match_type = simple_cls.match_type
-                schema.model_cls = simple_cls
-                return schema
-
-        comp = [
-            ArraySchema,
-            ObjectSchema
-        ]
-
-        for simple_cls in comp:
-            if st == simple_cls.match_type:
-                return simple_cls.normalize(datum)
-
-        # Model?
-        if '.' in st:
-            schema = SimpleSchema({"type": st})
-            schema.match_type = st
-            schema.model_cls = None
-            return schema
-
-        raise ValidationError("Unknown type", st)
-
-
-
-class SimpleSchema(Schema):
-
-    # COPY-PASTE
-    @classmethod
-    def normalize(cls, datum):
-        # Normalize against model schema
-        schema = cls.get_schema()
-        datum = schema.normalize_data(datum)
-        # Validate against model's custom validation function
-        cls.validate(datum)
-        # Instantiate
-        return cls(datum)
-
-    @classmethod
     def get_schema(cls):
         return ObjectSchema({
             "type": "object",
             "properties": [
-                prop("type", StringSchema())
+                prop("type", normalize_schema({"type": "string"}))
             ]
         })
 
-    def resolve(self, fetcher):
-        if self.model_cls == None:
-            self.model_cls = fetcher(self.match_type)
 
 
 
@@ -260,7 +241,7 @@ class ObjectModel(BaseModel):
         return ret
 
 
-class ObjectSchema(SimpleSchema):
+class ObjectSchema(Schema):
     model_cls = ObjectModel
     match_type = "object"
 
@@ -269,12 +250,12 @@ class ObjectSchema(SimpleSchema):
         return ObjectSchema({
             "type": "object",
             "properties": [
-                prop("type", StringSchema()),
+                prop("type", normalize_schema({"type": "string"})),
                 prop("properties", ArraySchema({
                     "items": ObjectSchema({
                         "properties": [
-                            prop("name", StringSchema()),
-                            prop("schema", SchemaSchema())
+                            prop("name", normalize_schema({"type": "string"})),
+                            prop("schema", normalize_schema({"type": "schema"}))
                         ]
                     })
                 }))
@@ -292,10 +273,6 @@ class ObjectSchema(SimpleSchema):
         if len(props) > len(set(props)):
             raise ValidationError("Duplicate properties")
 
-    def resolve(self, fetcher):
-        super(ObjectSchema, self).resolve(fetcher)
-        for prop in self.opts["properties"]:
-            prop["schema"].resolve(fetcher)
 
 
 
@@ -327,7 +304,7 @@ class ArrayModel(BaseModel):
         """
         return [items.serialize_data(item) for item in datum]
 
-class ArraySchema(SimpleSchema):
+class ArraySchema(Schema):
     model_cls = ArrayModel
     match_type = u"array"
 
@@ -335,14 +312,11 @@ class ArraySchema(SimpleSchema):
     def get_schema(cls):
         return ObjectSchema({
             "properties": [
-                prop("type", StringSchema()),
-                prop("items", SchemaSchema())
+                prop("type", normalize_schema({"type": "string"})),
+                prop("items", normalize_schema({"type": "schema"}))
             ]
         })
 
-    def resolve(self, fetcher):
-        super(ArraySchema, self).resolve(fetcher)
-        self.opts["items"].resolve(fetcher)
 
 
 
