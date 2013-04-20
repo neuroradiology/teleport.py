@@ -154,6 +154,7 @@ class ClassModel(Model):
 
 
 class Schema(Model):
+    match_type = "schema"
 
     def __init__(self, data=None):
         # It is okay to omit type in the constructor, the Schema
@@ -182,27 +183,35 @@ class Schema(Model):
     @classmethod
     def normalize(cls, datum):
 
-        invalid = ValidationError("Invalid schema", datum)
-
         # Peek into the object before letting the real models
         # do proper validation
         if type(datum) != dict or "type" not in datum.keys():
-            raise invalid
+            raise ValidationError("Invalid schema", datum)
         st = datum["type"]
 
         # Simple model?
         simple = [
-            IntegerSchema,
-            FloatSchema,
-            StringSchema,
-            BinarySchema,
-            BooleanSchema,
-            ArraySchema,
-            ObjectSchema,
-            JSONDataSchema,
-            SchemaSchema
+            IntegerModel,
+            FloatModel,
+            StringModel,
+            BinaryModel,
+            BooleanModel,
+            JSONData,
+            Schema
         ]
         for simple_cls in simple:
+            if st == simple_cls.match_type:
+                schema = SimpleSchema({"type": st})
+                schema.match_type = simple_cls.match_type
+                schema.model_cls = simple_cls
+                return schema
+
+        comp = [
+            ArraySchema,
+            ObjectSchema
+        ]
+
+        for simple_cls in comp:
             if st == simple_cls.match_type:
                 return simple_cls.normalize(datum)
 
@@ -230,7 +239,7 @@ class SimpleSchema(Schema):
     @classmethod
     def get_schema(cls):
         return ObjectSchema([
-            prop("type", StringSchema())
+            prop("type", Schema.normalize({"type": "string"}))
         ])
 
     def resolve(self, fetcher):
@@ -238,14 +247,12 @@ class SimpleSchema(Schema):
             self.model_cls = fetcher(self.match_type)
 
 
-class SchemaSchema(SimpleSchema):
-    match_type = "schema"
-    model_cls = Schema
 
 
 
 
 class ObjectModel(BaseModel):
+    match_type = "object"
 
     @classmethod
     def normalize(cls, datum, properties):
@@ -313,10 +320,10 @@ class ObjectSchema(SimpleSchema):
     @classmethod
     def get_schema(cls):
         return ObjectSchema([
-            prop("type", StringSchema()),
+            prop("type", Schema.normalize({"type": "string"})),
             prop("properties", ArraySchema(ObjectSchema([
-                prop("name", StringSchema()),
-                prop("schema", SchemaSchema())
+                prop("name", Schema.normalize({"type": "string"})),
+                prop("schema", Schema.normalize({"type": "schema"}))
             ])))
         ])
 
@@ -339,6 +346,7 @@ class ObjectSchema(SimpleSchema):
 
 
 class ArrayModel(BaseModel):
+    match_type = "array"
 
     @classmethod
     def normalize(cls, datum, items):
@@ -381,8 +389,8 @@ class ArraySchema(SimpleSchema):
     @classmethod
     def get_schema(cls):
         return ObjectSchema([
-            prop("type", StringSchema()),
-            prop("items", SchemaSchema())
+            prop("type", Schema.normalize({"type": "string"})),
+            prop("items", Schema.normalize({"type": "schema"}))
         ])
 
     def resolve(self, fetcher):
@@ -394,6 +402,7 @@ class ArraySchema(SimpleSchema):
 
 
 class IntegerModel(BaseModel):
+    match_type = "integer"
 
     @classmethod
     def normalize(cls, datum, **kwargs):
@@ -412,14 +421,12 @@ class IntegerModel(BaseModel):
     def serialize(cls, datum):
         return datum
 
-class IntegerSchema(SimpleSchema):
-    model_cls = IntegerModel
-    match_type = "integer"
 
 
 
 
 class FloatModel(BaseModel):
+    match_type = "float"
 
     @classmethod
     def normalize(cls, datum, **kwargs):
@@ -437,14 +444,12 @@ class FloatModel(BaseModel):
     def serialize(cls, datum):
         return datum
 
-class FloatSchema(SimpleSchema):
-    model_cls = FloatModel
-    match_type = "float"
 
 
 
 
 class StringModel(BaseModel):
+    match_type = "string"
 
     @classmethod
     def normalize(cls, datum, **kwargs):
@@ -468,15 +473,13 @@ class StringModel(BaseModel):
     def serialize(cls, datum):
         return datum
 
-class StringSchema(SimpleSchema):
-    model_cls = StringModel
-    match_type = "string"
 
 
 
 
 
 class BinaryModel(BaseModel):
+    match_type = "binary"
 
     @classmethod
     def normalize(cls, datum, **kwargs):
@@ -496,14 +499,12 @@ class BinaryModel(BaseModel):
         """Encode *datum* in base64."""
         return base64.b64encode(datum)
 
-class BinarySchema(SimpleSchema):
-    model_cls = BinaryModel
-    match_type = "binary"
 
 
 
 
 class BooleanModel(BaseModel):
+    match_type = "boolean"
 
     @classmethod
     def normalize(cls, datum, **kwargs):
@@ -518,15 +519,13 @@ class BooleanModel(BaseModel):
     def serialize(cls, datum):
         return datum
 
-class BooleanSchema(SimpleSchema):
-    model_cls = BooleanModel
-    match_type = "boolean"
 
 
 
 
 
 class JSONData(BaseModel):
+    match_type = "json"
 
     def __repr__(self):
         contents = json.dumps(self.data)
@@ -551,9 +550,6 @@ class JSONData(BaseModel):
             return ""
         return json.dumps(s.serialize())
 
-class JSONDataSchema(SimpleSchema):
-    model_cls = JSONData
-    match_type = "json"
 
 
 

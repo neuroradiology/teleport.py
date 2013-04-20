@@ -48,19 +48,6 @@ class TestSchema(TestCase):
     def test_serialize_schema(self):
         self.assertEqual(deep_schema, deep_normalizer.serialize())
 
-    def test_schema_subclass_delegation(self):
-        self.assertTrue(isinstance(Schema.normalize({"type": "integer"}), IntegerSchema))
-        self.assertTrue(isinstance(Schema.normalize({"type": "float"}), FloatSchema))
-        self.assertTrue(isinstance(Schema.normalize({"type": "boolean"}), BooleanSchema))
-        self.assertTrue(isinstance(Schema.normalize({"type": "string"}), StringSchema))
-        self.assertTrue(isinstance(Schema.normalize({"type": "binary"}), BinarySchema))
-        self.assertTrue(isinstance(Schema.normalize({"type": "json"}), JSONDataSchema))
-        self.assertTrue(isinstance(Schema.normalize({"type": "schema"}), SchemaSchema))
-
-    def test_schema_subclass_wrong_type(self):
-        with self.assertRaisesRegexp(ValidationError, "expects type=string"):
-            StringSchema.normalize({"type": "str"})
-
     def test_schema_extra_parts(self):
         # object with items
         s = deepcopy(array_schema)
