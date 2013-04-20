@@ -354,10 +354,7 @@ class TestCustomType(TestCase):
         self.fetcher = fetcher
 
     def test_resolve(self):
-        s = Schema.normalize({"type": "test.FrenchBoolean"})
-        self.assertEqual(s.__class__, SimpleSchema)
-        self.assertEqual(s.model_cls, None)
-        s.resolve(self.fetcher)
+        s = Schema.normalize({"type": "test.FrenchBoolean"}, self.fetcher)
         self.assertEqual(s.model_cls, self.FrenchBoolean)
         self.assertEqual(s.normalize_data("Oui"), True)
 

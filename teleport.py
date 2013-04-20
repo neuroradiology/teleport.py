@@ -119,7 +119,7 @@ class ClassModel(Model):
     def __init__(self, **kwargs):
         self.data = {}
         self.props = {}
-        for prop in self.properties:
+        for prop in self.get_schema().data["properties"]:
             self.props[prop["name"]] = prop
         for key, value in kwargs.items():
             if key in self.props.keys():
@@ -132,13 +132,13 @@ class ClassModel(Model):
         return cls(**datum)
 
     def __getattr__(self, key):
-        for prop in self.properties:
+        for prop in self.get_schema().data["properties"]:
             if prop["name"] == key:
                 return self.data.get(key, None)
         raise AttributeError()
 
     def __setattr__(self, key, value):
-        for prop in self.properties:
+        for prop in self.get_schema().data["properties"]:
             if prop["name"] == key:
                 if value == None:
                     del self.data[key]
@@ -180,14 +180,12 @@ class Schema(Model):
         return self.model_cls.serialize(datum, **self.opts)
 
     @classmethod
-    def normalize(cls, datum):
-
-        invalid = ValidationError("Invalid schema", datum)
+    def normalize(cls, datum, fetcher=None):
 
         # Peek into the object before letting the real models
         # do proper validation
         if type(datum) != dict or "type" not in datum.keys():
-            raise invalid
+            raise ValidationError("Invalid schema", datum)
         st = datum["type"]
 
         # Simple model?
@@ -204,13 +202,18 @@ class Schema(Model):
         ]
         for simple_cls in simple:
             if st == simple_cls.match_type:
-                return simple_cls.normalize(datum)
+                schema = simple_cls.normalize(datum)
+                if fetcher:
+                    schema.resolve(fetcher)
+                return schema
 
         # Model?
         if '.' in st:
             schema = SimpleSchema({"type": st})
             schema.match_type = st
             schema.model_cls = None
+            if fetcher:
+                schema.resolve(fetcher)
             return schema
 
         raise ValidationError("Unknown type", st)
