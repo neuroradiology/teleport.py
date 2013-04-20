@@ -1,6 +1,7 @@
 import sys
 import json
 import base64
+from copy import deepcopy
 
 def prop(name, schema):
     return {
@@ -109,7 +110,9 @@ def normalize_schema(datum):
     # do proper validation
     if type(datum) != dict or "type" not in datum.keys():
         raise ValidationError("Invalid schema", datum)
-    st = datum["type"]
+        
+    datum = deepcopy(datum)
+    st = datum.pop("type")
 
     # Simple model?
     simple = [
@@ -123,7 +126,7 @@ def normalize_schema(datum):
     ]
     for simple_cls in simple:
         if st == simple_cls.match_type:
-            schema = Schema({"type": st})
+            schema = Schema({})
             schema.match_type = simple_cls.match_type
             schema.model_cls = simple_cls
             return schema
@@ -139,7 +142,7 @@ def normalize_schema(datum):
 
     # Model?
     if '.' in st:
-        schema = Schema({"type": st})
+        schema = Schema({})
         schema.match_type = st
         schema.model_cls = None
         return schema
@@ -151,35 +154,23 @@ def normalize_schema(datum):
 class Schema(Model):
     match_type = "schema"
 
-    def __init__(self, data=None):
-        # It is okay to omit type in the constructor, the Schema
-        # will know its type from the match_type attibute
-        super(Schema, self).__init__(data)
-        # Everything except for the type becomes an option
-        self.opts = self.data.copy()
-        self.opts.pop("type", None)
-
-    @classmethod
-    def validate(cls, datum):
-        if datum["type"] != cls.match_type:
-            raise ValidationError("%s expects type=%s" % (cls, cls.match_type,))
-
-
     def normalize_data(self, datum):
         if self.model_cls == Schema:
             return normalize_schema(datum)
-        return self.model_cls.normalize(datum, **self.opts)
+        return self.model_cls.normalize(datum, **self.data)
 
     def serialize_data(self, datum):
-        return self.model_cls.serialize(datum, **self.opts)
+        return self.model_cls.serialize(datum, **self.data)
+
+    def serialize(self):
+        s = {"type": self.match_type}
+        s.update(self.get_schema().serialize_data(self.data))
+        return s
 
     @classmethod
     def get_schema(cls):
         return ObjectSchema({
-            "type": "object",
-            "properties": [
-                prop("type", normalize_schema({"type": "string"}))
-            ]
+            "properties": []
         })
 
 
@@ -248,9 +239,7 @@ class ObjectSchema(Schema):
     @classmethod
     def get_schema(cls):
         return ObjectSchema({
-            "type": "object",
             "properties": [
-                prop("type", normalize_schema({"type": "string"})),
                 prop("properties", ArraySchema({
                     "items": ObjectSchema({
                         "properties": [
@@ -267,7 +256,6 @@ class ObjectSchema(Schema):
         """Raises :exc:`~cosmic.exception.ValidationError` if there are two
         properties with the same name.
         """
-        super(ObjectSchema, cls).validate(datum)
         # Additional validation to check for duplicate properties
         props = [prop["name"] for prop in datum['properties']]
         if len(props) > len(set(props)):
@@ -304,6 +292,7 @@ class ArrayModel(BaseModel):
         """
         return [items.serialize_data(item) for item in datum]
 
+
 class ArraySchema(Schema):
     model_cls = ArrayModel
     match_type = u"array"
@@ -312,7 +301,6 @@ class ArraySchema(Schema):
     def get_schema(cls):
         return ObjectSchema({
             "properties": [
-                prop("type", normalize_schema({"type": "string"})),
                 prop("items", normalize_schema({"type": "schema"}))
             ]
         })
@@ -515,7 +503,6 @@ class ClassModel(ObjectModel):
     @classmethod
     def get_schema(cls):
         return ObjectSchema({
-            "type": "object",
             "properties": cls.properties
         })
 
