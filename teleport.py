@@ -155,7 +155,7 @@ class ClassModel(Model):
 
     @classmethod
     def get_schema(cls):
-        return ObjectSchema(cls.properties)
+        return ObjectModel.SchemaArgs(properties=cls.properties)
 
 
 
@@ -176,19 +176,24 @@ class Schema(BaseModel):
         st = datum.pop("type")
 
         try:
-            schema_cls = models.resolve(st)
+            model_cls = models.resolve(st)
         except KeyError:
             raise ValidationError("Unknown type", st)
 
-        schema_cls.match_type = st
-        return schema_cls.normalize(datum)
+        model_cls.SchemaArgs.match_type = st
+        model_cls.SchemaArgs.model_cls = model_cls
+        return model_cls.SchemaArgs.normalize(datum)
 
 
 
 class SimpleSchema(Model):
 
-    def __init__(self, opts={}):
-        super(SimpleSchema, self).__init__(opts)
+    def __init__(self, **kwargs):
+        super(SimpleSchema, self).__init__(kwargs)
+
+    @classmethod
+    def instantiate(cls, datum):
+        return cls(**datum)
 
     def serialize(self):
         s = {
@@ -205,11 +210,13 @@ class SimpleSchema(Model):
 
     @classmethod
     def get_schema(cls):
-        return ObjectSchema([])
+        return ObjectModel.SchemaArgs(properties=[])
 
 
 class SchemaSchema(SimpleSchema):
     model_cls = Schema
+
+Schema.SchemaArgs = SchemaSchema
 
 
 
@@ -264,39 +271,33 @@ class ObjectModel(BaseModel):
                 ret[name] = prop['schema'].serialize_data(datum[name])
         return ret
 
+    class SchemaArgs(SimpleSchema):
 
-class ObjectSchema(SimpleSchema):
-    model_cls = ObjectModel
+        @classmethod
+        def get_schema(cls):
+            if hasattr(cls, "_schema"):
+                return cls._schema
+            cls._schema = Schema.SchemaArgs(
+                properties=[
+                    prop("type", StringModel.SchemaArgs()),
+                    prop("properties", ArrayModel.SchemaArgs(
+                        items=ObjectModel.SchemaArgs(
+                            properties=[
+                                prop("name", StringModel.SchemaArgs()),
+                                prop("schema", Schema.SchemaArgs())
+                            ])))])
+            return cls._schema
 
-    def __init__(self, props):
-        super(ObjectSchema, self).__init__({
-            "properties": props
-        })
+        @classmethod
+        def validate(cls, datum):
+            """Raises :exc:`~cosmic.exception.ValidationError` if there are two
+            properties with the same name.
+            """
+            # Additional validation to check for duplicate properties
+            props = [prop["name"] for prop in datum['properties']]
+            if len(props) > len(set(props)):
+                raise ValidationError("Duplicate properties")
 
-    @classmethod
-    def instantiate(cls, datum):
-        return cls(datum["properties"])
-
-    @classmethod
-    def get_schema(cls):
-        return ObjectSchema([
-            prop("type", StringSchema()),
-            prop("properties", ArraySchema(ObjectSchema([
-                prop("name", StringSchema()),
-                prop("schema", SchemaSchema())
-            ])))
-        ])
-
-    @classmethod
-    def validate(cls, datum):
-        """Raises :exc:`~cosmic.exception.ValidationError` if there are two
-        properties with the same name.
-        """
-        super(ObjectSchema, cls).validate(datum)
-        # Additional validation to check for duplicate properties
-        props = [prop["name"] for prop in datum['properties']]
-        if len(props) > len(set(props)):
-            raise ValidationError("Duplicate properties")
 
 
 
@@ -327,28 +328,24 @@ class ArrayModel(BaseModel):
         """
         return [items.serialize_data(item) for item in datum]
 
+    class SchemaArgs(SimpleSchema):
 
-class ArraySchema(SimpleSchema):
-    model_cls = ArrayModel
+        @classmethod
+        def get_schema(cls):
+            if hasattr(cls, "_schema"):
+                return cls._schema
+            cls._schema = Schema.SchemaArgs(
+                properties=[
+                    prop("items", Schema.SchemaArgs())
+                ])
+            return cls._schema
 
-    def __init__(self, props):
-        super(ArraySchema, self).__init__({
-            "items": props
-        })
-
-    @classmethod
-    def instantiate(cls, datum):
-        return cls(datum["items"])
-
-    @classmethod
-    def get_schema(cls):
-        return ObjectSchema([
-            prop("items", SchemaSchema())
-        ])
 
 
 
 class IntegerModel(BaseModel):
+    class SchemaArgs(SimpleSchema):
+        pass
 
     @classmethod
     def normalize(cls, datum, **kwargs):
@@ -368,12 +365,12 @@ class IntegerModel(BaseModel):
         return datum
 
 
-class IntegerSchema(SimpleSchema):
-    model_cls = IntegerModel
 
 
 
 class FloatModel(BaseModel):
+    class SchemaArgs(SimpleSchema):
+        pass
 
     @classmethod
     def normalize(cls, datum, **kwargs):
@@ -392,12 +389,11 @@ class FloatModel(BaseModel):
         return datum
 
 
-class FloatSchema(SimpleSchema):
-    model_cls = FloatModel
-
 
 
 class StringModel(BaseModel):
+    class SchemaArgs(SimpleSchema):
+        pass
 
     @classmethod
     def normalize(cls, datum, **kwargs):
@@ -422,12 +418,11 @@ class StringModel(BaseModel):
         return datum
 
 
-class StringSchema(SimpleSchema):
-    model_cls = StringModel
-
 
 
 class BinaryModel(BaseModel):
+    class SchemaArgs(SimpleSchema):
+        pass
 
     @classmethod
     def normalize(cls, datum, **kwargs):
@@ -448,12 +443,11 @@ class BinaryModel(BaseModel):
         return base64.b64encode(datum)
 
 
-class BinarySchema(SimpleSchema):
-    model_cls = BinaryModel
-
 
 
 class BooleanModel(BaseModel):
+    class SchemaArgs(SimpleSchema):
+        pass
 
     @classmethod
     def normalize(cls, datum, **kwargs):
@@ -469,12 +463,11 @@ class BooleanModel(BaseModel):
         return datum
 
 
-class BooleanSchema(SimpleSchema):
-    model_cls = BooleanModel
-
 
 
 class JSONData(BaseModel):
+    class SchemaArgs(SimpleSchema):
+        pass
 
     def __repr__(self):
         contents = json.dumps(self.data)
@@ -499,9 +492,6 @@ class JSONData(BaseModel):
             return ""
         return json.dumps(s.serialize())
 
-
-class JSONDataSchema(SimpleSchema):
-    model_cls = JSONData
 
 
 
@@ -541,13 +531,13 @@ class Namespace(OrderedDict):
 
 
 models = Namespace({
-    "string": StringSchema,
-    "integer": IntegerSchema,
-    "float": FloatSchema,
-    "binary": BinarySchema,
-    "boolean": BooleanSchema,
-    "array": ArraySchema,
-    "object": ObjectSchema,
-    "json": JSONDataSchema,
-    "schema": SchemaSchema
+    "string": StringModel,
+    "integer": IntegerModel,
+    "float": FloatModel,
+    "binary": BinaryModel,
+    "boolean": BooleanModel,
+    "array": ArrayModel,
+    "object": ObjectModel,
+    "json": JSONData,
+    "schema": Schema
 })

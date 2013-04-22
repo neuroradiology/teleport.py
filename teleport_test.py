@@ -333,6 +333,7 @@ class TestCustomType(TestCase):
     def setUp(self):
 
         class FrenchBoolean(Model):
+            SchemaArgs = SimpleSchema
 
             @classmethod
             def normalize(cls, datum):
@@ -346,7 +347,7 @@ class TestCustomType(TestCase):
             model_cls = FrenchBoolean
 
         models["test"] = Namespace({
-            "FrenchBoolean": FrenchBooleanSchema
+            "FrenchBoolean": FrenchBoolean
         })
 
         self.FrenchBoolean = FrenchBoolean
