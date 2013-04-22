@@ -1,13 +1,17 @@
 import sys
 import json
 import base64
+from collections import OrderedDict
 from copy import deepcopy
+
+
 
 def prop(name, schema):
     return {
         "name": name,
         "schema": schema
     }
+
 
 class ValidationError(Exception):
     """Raised by the model system. Stores the location of the error in the
@@ -57,6 +61,7 @@ class UnicodeDecodeValidationError(ValidationError):
     """A subclass of :exc:`~cosmic.exceptions.ValidationError` raised
     in place of a :exc:`UnicodeDecodeError`.
     """
+
 
 
 class BaseModel(object):
@@ -162,7 +167,6 @@ class Schema(BaseModel):
 
     @classmethod
     def normalize(cls, datum):
-
         # Peek into the object before letting the real models
         # do proper validation
         if type(datum) != dict or "type" not in datum.keys():
@@ -171,30 +175,13 @@ class Schema(BaseModel):
         datum = deepcopy(datum)
         st = datum.pop("type")
 
-        # Simple model?
-        simple = [
-            IntegerSchema,
-            FloatSchema,
-            StringSchema,
-            BinarySchema,
-            BooleanSchema,
-            ArraySchema,
-            ObjectSchema,
-            JSONDataSchema,
-            SchemaSchema
-        ]
-        for simple_cls in simple:
-            if st == simple_cls.match_type:
-                return simple_cls.normalize(datum)
+        try:
+            schema_cls = models.resolve(st)
+        except KeyError:
+            raise ValidationError("Unknown type", st)
 
-        # Model?
-        if '.' in st:
-            schema = SimpleSchema()
-            schema.match_type = st
-            schema.model_cls = None
-            return schema
-
-        raise ValidationError("Unknown type", st)
+        schema_cls.match_type = st
+        return schema_cls.normalize(datum)
 
 
 
@@ -220,15 +207,9 @@ class SimpleSchema(Model):
     def get_schema(cls):
         return ObjectSchema([])
 
-    def resolve(self, fetcher):
-        if self.model_cls == None:
-            self.model_cls = fetcher(self.match_type)
-
 
 class SchemaSchema(SimpleSchema):
-    match_type = "schema"
     model_cls = Schema
-
 
 
 
@@ -286,7 +267,6 @@ class ObjectModel(BaseModel):
 
 class ObjectSchema(SimpleSchema):
     model_cls = ObjectModel
-    match_type = "object"
 
     def __init__(self, props):
         super(ObjectSchema, self).__init__({
@@ -318,11 +298,6 @@ class ObjectSchema(SimpleSchema):
         if len(props) > len(set(props)):
             raise ValidationError("Duplicate properties")
 
-    def resolve(self, fetcher):
-        super(ObjectSchema, self).resolve(fetcher)
-        for prop in self.data["properties"]:
-            prop["schema"].resolve(fetcher)
-
 
 
 class ArrayModel(BaseModel):
@@ -352,9 +327,9 @@ class ArrayModel(BaseModel):
         """
         return [items.serialize_data(item) for item in datum]
 
+
 class ArraySchema(SimpleSchema):
     model_cls = ArrayModel
-    match_type = u"array"
 
     def __init__(self, props):
         super(ArraySchema, self).__init__({
@@ -370,12 +345,6 @@ class ArraySchema(SimpleSchema):
         return ObjectSchema([
             prop("items", SchemaSchema())
         ])
-
-    def resolve(self, fetcher):
-        super(ArraySchema, self).resolve(fetcher)
-        self.data["items"].resolve(fetcher)
-
-
 
 
 
@@ -398,10 +367,9 @@ class IntegerModel(BaseModel):
     def serialize(cls, datum):
         return datum
 
+
 class IntegerSchema(SimpleSchema):
     model_cls = IntegerModel
-    match_type = "integer"
-
 
 
 
@@ -423,10 +391,9 @@ class FloatModel(BaseModel):
     def serialize(cls, datum):
         return datum
 
+
 class FloatSchema(SimpleSchema):
     model_cls = FloatModel
-    match_type = "float"
-
 
 
 
@@ -454,11 +421,9 @@ class StringModel(BaseModel):
     def serialize(cls, datum):
         return datum
 
+
 class StringSchema(SimpleSchema):
     model_cls = StringModel
-    match_type = "string"
-
-
 
 
 
@@ -482,10 +447,9 @@ class BinaryModel(BaseModel):
         """Encode *datum* in base64."""
         return base64.b64encode(datum)
 
+
 class BinarySchema(SimpleSchema):
     model_cls = BinaryModel
-    match_type = "binary"
-
 
 
 
@@ -504,11 +468,9 @@ class BooleanModel(BaseModel):
     def serialize(cls, datum):
         return datum
 
+
 class BooleanSchema(SimpleSchema):
     model_cls = BooleanModel
-    match_type = "boolean"
-
-
 
 
 
@@ -537,9 +499,9 @@ class JSONData(BaseModel):
             return ""
         return json.dumps(s.serialize())
 
+
 class JSONDataSchema(SimpleSchema):
     model_cls = JSONData
-    match_type = "json"
 
 
 
@@ -561,3 +523,31 @@ def serialize_json(schema, datum):
         return JSONData(schema.serialize_data(datum))
     return None
 
+
+class Namespace(OrderedDict):
+    """An ordered dictionary that implements __all__ and
+    can thus be treated as a module.
+    """
+
+    @property
+    def __all__(self):
+        return self.keys()
+
+    def resolve(self, name):
+        if '.' not in name:
+            return self[name]
+        first, rest = name.split('.', 1)
+        return self[first].resolve(rest)
+
+
+models = Namespace({
+    "string": StringSchema,
+    "integer": IntegerSchema,
+    "float": FloatSchema,
+    "binary": BinarySchema,
+    "boolean": BooleanSchema,
+    "array": ArraySchema,
+    "object": ObjectSchema,
+    "json": JSONDataSchema,
+    "schema": SchemaSchema
+})

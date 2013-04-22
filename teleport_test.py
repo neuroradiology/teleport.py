@@ -342,19 +342,17 @@ class TestCustomType(TestCase):
             def serialize(cls, datum):
                 return {True: "Oui", False: "Non"}[datum]
 
-        def fetcher(name):
-            if name == "test.FrenchBoolean":
-                return FrenchBoolean
-            raise ValidationError("Unknown model")
+        class FrenchBooleanSchema(SimpleSchema):
+            model_cls = FrenchBoolean
+
+        models["test"] = Namespace({
+            "FrenchBoolean": FrenchBooleanSchema
+        })
 
         self.FrenchBoolean = FrenchBoolean
-        self.fetcher = fetcher
 
     def test_resolve(self):
         s = Schema.normalize({"type": "test.FrenchBoolean"})
-        self.assertEqual(s.__class__, SimpleSchema)
-        self.assertEqual(s.model_cls, None)
-        s.resolve(self.fetcher)
         self.assertEqual(s.model_cls, self.FrenchBoolean)
         self.assertEqual(s.normalize_data("Oui"), True)
 
@@ -370,6 +368,5 @@ class TestCustomType(TestCase):
                 })
             ]
         })
-        s.resolve(self.fetcher)
         self.assertEqual(s.normalize_data({"a": ["Oui"]}), {"a": [True]})
 
