@@ -167,8 +167,8 @@ class Schema(BaseModel):
     match_type = "schema"
 
     def __init__(self, model_cls, args):
-        self.model_cls = model_cls
-        self.schema_cls = models.resolve(model_cls.match_type)
+        self.model_cls = models.resolve(model_cls.match_type)
+        self.schema_cls = self.model_cls.schema_cls
         self.args = args
 
     def serialize(self):
@@ -187,13 +187,13 @@ class Schema(BaseModel):
         st = datum.pop("type")
 
         try:
-            schema_cls = models.resolve(st)
+            model_cls = models.resolve(st)
         except KeyError:
             raise ValidationError("Unknown type", st)
 
         return cls(
-            model_cls=schema_cls.model_cls,
-            args=schema_cls.normalize(datum))
+            model_cls=model_cls,
+            args=model_cls.schema_cls.normalize(datum))
 
     def normalize_data(self, datum):
         return self.model_cls.normalize(datum, **self.args.data)
@@ -213,11 +213,9 @@ class SimpleSchema(Model):
     def get_schema(cls):
         return ObjectModel.schema(properties=[])
 
+BaseModel.schema_cls = SimpleSchema
 
-class SchemaSchema(SimpleSchema):
-    model_cls = Schema
 
-Schema.schema_cls = SchemaSchema
 
 
 class ObjectModel(BaseModel):
@@ -274,7 +272,6 @@ class ObjectModel(BaseModel):
 
 
 class ObjectSchema(SimpleSchema):
-    model_cls = ObjectModel
 
     @classmethod
     def get_schema(cls):
@@ -332,7 +329,6 @@ class ArrayModel(BaseModel):
 
 
 class ArraySchema(SimpleSchema):
-    model_cls = ArrayModel
 
     @classmethod
     def get_schema(cls):
@@ -364,10 +360,6 @@ class IntegerModel(BaseModel):
         return datum
 
 
-class IntegerSchema(SimpleSchema):
-    model_cls = IntegerModel
-
-IntegerModel.schema_cls = IntegerSchema
 
 
 class FloatModel(BaseModel):
@@ -390,10 +382,6 @@ class FloatModel(BaseModel):
         return datum
 
 
-class FloatSchema(SimpleSchema):
-    model_cls = FloatModel
-
-FloatModel.schema_cls = FloatSchema
 
 
 class StringModel(BaseModel):
@@ -422,10 +410,6 @@ class StringModel(BaseModel):
         return datum
 
 
-class StringSchema(SimpleSchema):
-    model_cls = StringModel
-
-StringModel.schema_cls = StringSchema
 
 
 class BinaryModel(BaseModel):
@@ -450,10 +434,6 @@ class BinaryModel(BaseModel):
         return base64.b64encode(datum)
 
 
-class BinarySchema(SimpleSchema):
-    model_cls = BinaryModel
-
-BinaryModel.schema_cls = BinarySchema
 
 
 class BooleanModel(BaseModel):
@@ -473,10 +453,6 @@ class BooleanModel(BaseModel):
         return datum
 
 
-class BooleanSchema(SimpleSchema):
-    model_cls = BooleanModel
-
-BooleanModel.schema_cls = BooleanSchema
 
 
 class JSONData(BaseModel):
@@ -506,10 +482,6 @@ class JSONData(BaseModel):
         return json.dumps(s.serialize())
 
 
-class JSONDataSchema(SimpleSchema):
-    model_cls = JSONData
-
-JSONData.schema_cls = JSONDataSchema
 
 
 def normalize_json(schema, datum):
@@ -548,13 +520,13 @@ class Namespace(OrderedDict):
 
 
 models = Namespace({
-    "string": StringSchema,
-    "integer": IntegerSchema,
-    "float": FloatSchema,
-    "binary": BinarySchema,
-    "boolean": BooleanSchema,
-    "array": ArraySchema,
-    "object": ObjectSchema,
-    "json": JSONDataSchema,
-    "schema": SchemaSchema
+    "string": StringModel,
+    "integer": IntegerModel,
+    "float": FloatModel,
+    "binary": BinaryModel,
+    "boolean": BooleanModel,
+    "array": ArrayModel,
+    "object": ObjectModel,
+    "json": JSONData,
+    "schema": Schema
 })

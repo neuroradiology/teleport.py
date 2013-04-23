@@ -340,11 +340,8 @@ class TestCustomType(TestCase):
             def serialize(cls, datum):
                 return {True: "Oui", False: "Non"}[datum]
 
-        class FrenchBooleanSchema(SimpleSchema):
-            model_cls = FrenchBoolean
-
         models["test"] = Namespace({
-            "FrenchBoolean": FrenchBooleanSchema
+            "FrenchBoolean": FrenchBoolean
         })
 
         self.FrenchBoolean = FrenchBoolean
