@@ -39,6 +39,11 @@ deep_schema = {
         ]
     }
 }
+
+ObjectModel.schema(properties=[
+    prop("items", Schema.schema())
+]).normalize_data({"items": {"type": "integer"}})
+
 array_normalizer = Schema.normalize(array_schema)
 object_normalizer = Schema.normalize(object_schema)
 deep_normalizer = Schema.normalize(deep_schema)
@@ -46,17 +51,9 @@ deep_normalizer = Schema.normalize(deep_schema)
 class TestSchema(TestCase):
 
     def test_serialize_schema(self):
+        self.assertEqual(array_schema, array_normalizer.serialize())
         self.assertEqual(object_schema, object_normalizer.serialize())
         self.assertEqual(deep_schema, deep_normalizer.serialize())
-
-    def test_schema_subclass_delegation(self):
-        self.assertTrue(isinstance(Schema.normalize({"type": "integer"}), IntegerSchema))
-        self.assertTrue(isinstance(Schema.normalize({"type": "float"}), FloatSchema))
-        self.assertTrue(isinstance(Schema.normalize({"type": "boolean"}), BooleanSchema))
-        self.assertTrue(isinstance(Schema.normalize({"type": "string"}), StringSchema))
-        self.assertTrue(isinstance(Schema.normalize({"type": "binary"}), BinarySchema))
-        self.assertTrue(isinstance(Schema.normalize({"type": "json"}), JSONDataSchema))
-        self.assertTrue(isinstance(Schema.normalize({"type": "schema"}), SchemaSchema))
 
     def test_schema_extra_parts(self):
         # object with items
@@ -333,6 +330,7 @@ class TestCustomType(TestCase):
     def setUp(self):
 
         class FrenchBoolean(Model):
+            match_type = "test.FrenchBoolean"
 
             @classmethod
             def normalize(cls, datum):

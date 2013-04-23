@@ -69,6 +69,10 @@ class BaseModel(object):
     def __init__(self, data):
         self.data = data
 
+    @classmethod
+    def schema(cls, **kwargs):
+        return Schema(model_cls=cls, args=cls.schema_cls(kwargs))
+
     def serialize(self):
         """Serialize could be a classmethod like normalize, but by defining it
         this way, we are allowing a more natural syntax. Both of these work
@@ -155,15 +159,22 @@ class ClassModel(Model):
 
     @classmethod
     def get_schema(cls):
-        return ObjectSchema(cls.properties)
+        return ObjectModel.schema(properties=cls.properties)
 
 
 
 class Schema(BaseModel):
+    match_type = "schema"
 
-    @classmethod
-    def serialize(cls, datum):
-        return datum.serialize()
+    def __init__(self, model_cls, args):
+        self.model_cls = model_cls
+        self.schema_cls = models.resolve(model_cls.match_type)
+        self.args = args
+
+    def serialize(self):
+        ret = {"type": self.model_cls.match_type}
+        ret.update(self.args.serialize())
+        return ret
 
     @classmethod
     def normalize(cls, datum):
@@ -180,8 +191,16 @@ class Schema(BaseModel):
         except KeyError:
             raise ValidationError("Unknown type", st)
 
-        schema_cls.match_type = st
-        return schema_cls.normalize(datum)
+        return cls(
+            model_cls=schema_cls.model_cls,
+            args=schema_cls.normalize(datum))
+
+    def normalize_data(self, datum):
+        return self.model_cls.normalize(datum, **self.args.data)
+
+    def serialize_data(self, datum):
+        return self.model_cls.serialize(datum, **self.args.data)
+
 
 
 
@@ -190,30 +209,19 @@ class SimpleSchema(Model):
     def __init__(self, opts={}):
         super(SimpleSchema, self).__init__(opts)
 
-    def serialize(self):
-        s = {
-            "type": self.match_type
-        }
-        s.update(self.get_schema().serialize_data(self.data))
-        return s
-
-    def normalize_data(self, datum):
-        return self.model_cls.normalize(datum, **self.data)
-
-    def serialize_data(self, datum):
-        return self.model_cls.serialize(datum, **self.data)
-
     @classmethod
     def get_schema(cls):
-        return ObjectSchema([])
+        return ObjectModel.schema(properties=[])
 
 
 class SchemaSchema(SimpleSchema):
     model_cls = Schema
 
+Schema.schema_cls = SchemaSchema
 
 
 class ObjectModel(BaseModel):
+    match_type = "object"
 
     @classmethod
     def normalize(cls, datum, properties):
@@ -268,23 +276,16 @@ class ObjectModel(BaseModel):
 class ObjectSchema(SimpleSchema):
     model_cls = ObjectModel
 
-    def __init__(self, props):
-        super(ObjectSchema, self).__init__({
-            "properties": props
-        })
-
-    @classmethod
-    def instantiate(cls, datum):
-        return cls(datum["properties"])
-
     @classmethod
     def get_schema(cls):
-        return ObjectSchema([
-            prop("type", StringSchema()),
-            prop("properties", ArraySchema(ObjectSchema([
-                prop("name", StringSchema()),
-                prop("schema", SchemaSchema())
-            ])))
+        return ObjectModel.schema(properties=[
+            prop("type", StringModel.schema()),
+            prop("properties", ArrayModel.schema(
+                items=ObjectModel.schema(
+                    properties=[
+                        prop("name", StringModel.schema()),
+                        prop("schema", Schema.schema())
+                    ])))
         ])
 
     @classmethod
@@ -298,9 +299,11 @@ class ObjectSchema(SimpleSchema):
         if len(props) > len(set(props)):
             raise ValidationError("Duplicate properties")
 
+ObjectModel.schema_cls = ObjectSchema
 
 
 class ArrayModel(BaseModel):
+    match_type = "array"
 
     @classmethod
     def normalize(cls, datum, items):
@@ -331,24 +334,17 @@ class ArrayModel(BaseModel):
 class ArraySchema(SimpleSchema):
     model_cls = ArrayModel
 
-    def __init__(self, props):
-        super(ArraySchema, self).__init__({
-            "items": props
-        })
-
-    @classmethod
-    def instantiate(cls, datum):
-        return cls(datum["items"])
-
     @classmethod
     def get_schema(cls):
-        return ObjectSchema([
-            prop("items", SchemaSchema())
+        return ObjectModel.schema(properties=[
+            prop("items", Schema.schema())
         ])
 
+ArrayModel.schema_cls = ArraySchema
 
 
 class IntegerModel(BaseModel):
+    match_type = "integer"
 
     @classmethod
     def normalize(cls, datum, **kwargs):
@@ -371,9 +367,11 @@ class IntegerModel(BaseModel):
 class IntegerSchema(SimpleSchema):
     model_cls = IntegerModel
 
+IntegerModel.schema_cls = IntegerSchema
 
 
 class FloatModel(BaseModel):
+    match_type = "float"
 
     @classmethod
     def normalize(cls, datum, **kwargs):
@@ -395,9 +393,11 @@ class FloatModel(BaseModel):
 class FloatSchema(SimpleSchema):
     model_cls = FloatModel
 
+FloatModel.schema_cls = FloatSchema
 
 
 class StringModel(BaseModel):
+    match_type = "string"
 
     @classmethod
     def normalize(cls, datum, **kwargs):
@@ -425,9 +425,11 @@ class StringModel(BaseModel):
 class StringSchema(SimpleSchema):
     model_cls = StringModel
 
+StringModel.schema_cls = StringSchema
 
 
 class BinaryModel(BaseModel):
+    match_type = "binary"
 
     @classmethod
     def normalize(cls, datum, **kwargs):
@@ -451,9 +453,11 @@ class BinaryModel(BaseModel):
 class BinarySchema(SimpleSchema):
     model_cls = BinaryModel
 
+BinaryModel.schema_cls = BinarySchema
 
 
 class BooleanModel(BaseModel):
+    match_type = "boolean"
 
     @classmethod
     def normalize(cls, datum, **kwargs):
@@ -472,9 +476,11 @@ class BooleanModel(BaseModel):
 class BooleanSchema(SimpleSchema):
     model_cls = BooleanModel
 
+BooleanModel.schema_cls = BooleanSchema
 
 
 class JSONData(BaseModel):
+    match_type = "json"
 
     def __repr__(self):
         contents = json.dumps(self.data)
@@ -503,6 +509,7 @@ class JSONData(BaseModel):
 class JSONDataSchema(SimpleSchema):
     model_cls = JSONData
 
+JSONData.schema_cls = JSONDataSchema
 
 
 def normalize_json(schema, datum):
