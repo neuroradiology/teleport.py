@@ -343,7 +343,7 @@ class IntegerModel(BaseModel):
     match_type = "integer"
 
     @classmethod
-    def normalize(cls, datum, **kwargs):
+    def normalize(cls, datum):
         """If *datum* is an integer, return it; if it is a float with a 0 for
         its fractional part, return the integer part as an int. Otherwise,
         raise a
@@ -366,7 +366,7 @@ class FloatModel(BaseModel):
     match_type = "float"
 
     @classmethod
-    def normalize(cls, datum, **kwargs):
+    def normalize(cls, datum):
         """If *datum* is a float, return it; if it is an integer, cast it to a
         float and return it. Otherwise, raise a
         :exc:`~cosmic.exceptions.ValidationError`.
@@ -388,7 +388,7 @@ class StringModel(BaseModel):
     match_type = "string"
 
     @classmethod
-    def normalize(cls, datum, **kwargs):
+    def normalize(cls, datum):
         """If *datum* is of unicode type, return it. If it is a string, decode
         it as UTF-8 and return the result. Otherwise, raise a
         :exc:`~cosmic.exceptions.ValidationError`. Unicode errors are dealt
@@ -416,7 +416,7 @@ class BinaryModel(BaseModel):
     match_type = "binary"
 
     @classmethod
-    def normalize(cls, datum, **kwargs):
+    def normalize(cls, datum):
         """If *datum* is a base64-encoded string, decode and return it. If not
         a string, or encoding is wrong, raise
         :exc:`~cosmic.exceptions.ValidationError`.
@@ -440,7 +440,7 @@ class BooleanModel(BaseModel):
     match_type = "boolean"
 
     @classmethod
-    def normalize(cls, datum, **kwargs):
+    def normalize(cls, datum):
         """If *datum* is a boolean, return it. Otherwise, raise a
         :exc:`~cosmic.exceptions.ValidationError`.
         """
