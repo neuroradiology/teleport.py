@@ -331,6 +331,10 @@ class JSON(BasicPrimitive):
         return datum
 
     @staticmethod
+    def to_box(datum):
+        return datum
+
+    @staticmethod
     def from_json(datum):
         """Return the JSON value wrapped in a :class:`Box`.
         """
@@ -433,7 +437,9 @@ class Struct(ParametrizedPrimitive):
         for name, field in self.param.items():
             schema = field['schema']
             if name in datum.keys() and datum[name] != None:
-                ret[name] = schema.to_json(datum[name])
+                b = schema.to_box(datum[name])
+                if b:
+                    ret[name] = b.datum
         return ret
 
 

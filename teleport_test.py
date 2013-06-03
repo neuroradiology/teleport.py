@@ -264,8 +264,7 @@ class TestMaybe(TestCase):
             "datum": 1
         }
         nothing = {
-            "schema": {"type": "Nothing"},
-            "datum": None
+            "schema": {"type": "Nothing"}
         }
         m = Maybe(Integer)
         self.assertEqual(m.from_box(Box(j)), 1)
