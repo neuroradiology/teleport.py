@@ -184,11 +184,12 @@ class BasicPrimitive(object):
 
     @staticmethod
     def from_json(datum): # pragma: no cover
+        datum = datum.datum
         return datum
 
     @staticmethod
     def to_json(datum): # pragma: no cover
-        return datum
+        return Box(datum)
 
 
 
@@ -207,6 +208,7 @@ class Integer(BasicPrimitive):
         its fractional part, return the integer part as an int. Otherwise,
         raise a :exc:`ValidationError`.
         """
+        datum = datum.datum
         if type(datum) == int:
             return datum
         if type(datum) == float and datum.is_integer():
@@ -222,6 +224,7 @@ class Float(BasicPrimitive):
         """If *datum* is a float, return it; if it is an integer, cast it to a
         float and return it. Otherwise, raise a :exc:`ValidationError`.
         """
+        datum = datum.datum
         if type(datum) == float:
             return datum
         if type(datum) == int:
@@ -240,6 +243,7 @@ class String(BasicPrimitive):
         with strictly by raising :exc:`UnicodeDecodeValidationError`, a
         subclass of the above.
         """
+        datum = datum.datum
         if type(datum) == unicode:
             return datum
         if type(datum) == str:
@@ -258,6 +262,7 @@ class Binary(BasicPrimitive):
         """If *datum* is a base64-encoded string, decode and return it. If not
         a string, or encoding is wrong, raise :exc:`ValidationError`.
         """
+        datum = datum.datum
         if type(datum) in (str, unicode,):
             try:
                 return base64.b64decode(datum)
@@ -279,6 +284,7 @@ class Boolean(BasicPrimitive):
         """If *datum* is a boolean, return it. Otherwise, raise a
         :exc:`ValidationError`.
         """
+        datum = datum.datum
         if type(datum) == bool:
             return datum
         raise ValidationError("Invalid Boolean", datum)
@@ -305,11 +311,11 @@ class JSON(BasicPrimitive):
     def from_json(datum):
         """Return the JSON value wrapped in a :class:`Box`.
         """
-        return Box(datum)
+        return datum
 
     @staticmethod
     def to_json(datum):
-        return datum.datum
+        return datum
 
 
 
@@ -324,6 +330,7 @@ class Array(ParametrizedPrimitive):
         may raise a :exc:`ValidationError`. If *datum* is not a
         list, :exc:`ValidationError` will also be raised.
         """
+        datum = datum.datum
         if type(datum) == list:
             ret = []
             for i, item in enumerate(datum):
@@ -339,7 +346,7 @@ class Array(ParametrizedPrimitive):
         """Serialize each item in the *datum* iterable using *param*. Return
         the resulting values in a list.
         """
-        return [self.param.to_json(item) for item in datum]
+        return Box([self.param.to_json(item) for item in datum])
 
 
 
@@ -369,6 +376,7 @@ class Struct(ParametrizedPrimitive):
         3. One of the values of *datum* does not pass validation as defined
            by the *schema* of the corresponding field.
         """
+        datum = datum.datum
         if type(datum) == dict:
             ret = {}
             required = {}
@@ -401,7 +409,7 @@ class Struct(ParametrizedPrimitive):
             schema = field['schema']
             if name in datum.keys() and datum[name] != None:
                 ret[name] = schema.to_json(datum[name])
-        return ret
+        return Box(ret)
 
 
 
@@ -415,6 +423,7 @@ class Map(ParametrizedPrimitive):
         :exc:`ValidationError`. The keys of the dict must be unicode, and the
         values will be deserialized using *param*.
         """
+        datum = datum.datum
         if type(datum) == dict:
             ret = {}
             for key, val in datum.items():
@@ -432,7 +441,7 @@ class Map(ParametrizedPrimitive):
         ret = {}
         for key, val in datum.items():
             ret[key] = self.param.to_json(val)
-        return ret
+        return Box(ret)
 
 
 
@@ -499,12 +508,12 @@ class Schema(BasicPrimitive):
             type_name = datum.__class__.__name__
         param_schema = _get_current_map()[type_name][1]
         if param_schema != None:
-            return {
+            return Box({
                 "type": type_name,
                 "param": param_schema.to_json(datum.param)
-            }
+            })
         else:
-            return {"type": type_name}
+            return Box({"type": type_name})
 
     @staticmethod
     def from_json(datum):
@@ -513,6 +522,7 @@ class Schema(BasicPrimitive):
         :class:`TypeMap` instance to get the matching serializer. If no serializer
         is found, :exc:`UnknownTypeValidationError` will be raised.
         """
+        datum = datum.datum
         # Peek into dict struct to get the type
         if type(datum) != dict or "type" not in datum.keys():
             raise ValidationError("Invalid Schema", datum)
@@ -553,6 +563,7 @@ class Dynamic(BasicWrapper):
             "schema": datum["schema"],
             "datum": Box(datum["schema"].to_json(datum["datum"]))
         }
+
 
 
 

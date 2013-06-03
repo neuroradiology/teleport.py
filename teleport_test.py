@@ -4,13 +4,13 @@ from copy import deepcopy
 
 from teleport import *
 
-array_schema = {
+array_schema = Box({
     "type": u"Array",
     "param": {
         "type": u"Boolean"
     }
-}
-struct_schema = {
+})
+struct_schema = Box({
     "type": u"Struct",
     "param": {
         "map": {
@@ -25,19 +25,19 @@ struct_schema = {
         },
         "order": [u"foo", u"bar"]
     }
-}
-map_schema = {
+})
+map_schema = Box({
     "type": u"Map",
     "param": {"type": "Boolean"}
-}
-ordered_map_schema = {
+})
+ordered_map_schema = Box({
     "type": u"OrderedMap",
     "param": {"type": "Boolean"}
-}
-deep_schema = {
+})
+deep_schema = Box({
     "type": u"Array",
     "param": struct_schema
-}
+})
 array_serializer = Schema.from_json(array_schema)
 struct_serializer = Schema.from_json(struct_schema)
 deep_serializer = Schema.from_json(deep_schema)
