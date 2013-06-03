@@ -19,8 +19,8 @@ struct_schema = {
                 "schema": {"type": u"Boolean"}
             },
             u"bar": {
-                "required": False,
-                "schema": {"type": u"Integer"}
+                "required": True,
+                "schema": {"type": u"Maybe", "param": {"type": u"Integer"}}
             }
         },
         "order": [u"foo", u"bar"]
@@ -52,7 +52,7 @@ class TestSchema(TestCase):
         self.assertEqual(deep_schema, Schema.to_json(deep_serializer))
         struct_s = Struct([
             required(u"foo", Boolean),
-            optional(u"bar", Integer)
+            required(u"bar", Maybe(Integer))
         ])
         self.assertEqual(Schema.to_json(struct_s), struct_schema)
 
@@ -231,7 +231,7 @@ class TestStruct(TestCase):
             struct_serializer.from_json([])
         with self.assertRaisesRegexp(ValidationError, "Unexpected fields"):
             struct_serializer.from_json({"foo": True, "barr": 2.0})
-        with self.assertRaisesRegexp(ValidationError, "Missing fields"):
+        with self.assertRaisesRegexp(ValidationError, "Non-empty"):
             struct_serializer.from_json({"bar": 2})
 
     def test_to_json(self):

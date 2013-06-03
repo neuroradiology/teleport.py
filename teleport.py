@@ -98,6 +98,7 @@ def required(name, schema):
     return (name, {"schema": schema, "required": True},)
 
 def optional(name, schema):
+    raise NotImplementedError()
     return (name, {"schema": schema, "required": False},)
 
 
@@ -415,19 +416,18 @@ class Struct(ParametrizedPrimitive):
                     required[name] = field["schema"]
                 else:
                     optional[name] = field["schema"]
-            missing = set(required.keys()) - set(boxes.keys())
-            if missing:
-                raise ValidationError("Missing fields", list(missing))
             extra = set(boxes.keys()) - set(required.keys() + optional.keys())
             if extra:
                 raise ValidationError("Unexpected fields", list(extra))
             for field, schema in optional.items() + required.items():
-                if field in boxes.keys():
-                    try:
-                        ret[field] = schema.from_box(boxes.get(field, None))
-                    except ValidationError as e:
-                        e.stack.append(field)
-                        raise
+                box = boxes.get(field, None)
+                try:
+                    r = schema.from_box(box)
+                    if r:
+                        ret[field] = r
+                except ValidationError as e:
+                    e.stack.append(field)
+                    raise
             return ret
         else:
             raise ValidationError("Invalid Struct", datum)
@@ -587,10 +587,24 @@ class Nothing(BasicPrimitive):
 
 
 
+class Maybe(ParametrizedPrimitive):
+
+    def from_box(self, datum):
+        if datum == None:
+            return None
+        return self.param.from_box(datum)
+
+    def to_box(self, datum):
+        if datum == None:
+            return None
+        return self.param.to_box(datum)
+
+
+
 class Dynamic(BasicWrapper):
     schema = Struct([
         required("schema", Schema),
-        optional("datum", JSON)
+        required("datum", Maybe(JSON))
     ])
 
     @staticmethod
@@ -606,20 +620,6 @@ class Dynamic(BasicWrapper):
             "schema": datum["schema"],
             "datum": datum["schema"].to_box(datum["datum"])
         }
-
-
-class Maybe(ParametrizedPrimitive):
-
-    def from_box(self, datum):
-        if datum == None:
-            return None
-        return self.param.from_box(datum)
-
-    def to_box(self, datum):
-        if datum == None:
-            return None
-        return self.param.to_box(datum)
-
 
 
 
