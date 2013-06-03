@@ -256,6 +256,24 @@ class TestDynamic(TestCase):
         self.assertEqual(Dynamic.to_json(n), j)
 
 
+class TestMaybe(TestCase):
+
+    def test_it(self):
+        j = {
+            "schema": {"type": "Integer"},
+            "datum": 1
+        }
+        nothing = {
+            "schema": {"type": "Nothing"},
+            "datum": None
+        }
+        m = Maybe(Integer)
+        self.assertEqual(m.from_json(j), 1)
+        self.assertEqual(m.from_json(nothing), None)
+        self.assertEqual(m.to_json(1), j)
+        self.assertEqual(m.to_json(None), nothing)
+
+
 class Suit(BasicWrapper):
     schema = String
 

@@ -144,6 +144,8 @@ class Basic(object):
 
     @classmethod
     def from_box(cls, box):
+        if box == None:
+            raise ValidationError("Non-empty value expected")
         return cls.from_json(box.datum)
 
     @classmethod
@@ -153,6 +155,9 @@ class Basic(object):
 
 
 class Parametrized(object):
+
+    def __init__(self, param):
+        self.param = param
 
     def from_box(self, box):
         return self.from_json(box.datum)
@@ -215,9 +220,7 @@ class BasicPrimitive(Basic):
 
 
 class ParametrizedPrimitive(Parametrized):
-
-    def __init__(self, param):
-        self.param = param
+    pass
 
 
 
@@ -322,6 +325,10 @@ class Box(object):
 
 
 class JSON(BasicPrimitive):
+
+    @staticmethod
+    def from_box(datum):
+        return datum
 
     @staticmethod
     def from_json(datum):
@@ -556,17 +563,31 @@ class Schema(BasicPrimitive):
 
 
 
+class Nothing(BasicPrimitive):
+
+    @staticmethod
+    def from_box(nothing):
+        if nothing != None:
+            raise ValidationError("Nothing expected", nothing)
+        return None
+
+    @staticmethod
+    def to_box(nothing):
+        return None
+
+
+
 class Dynamic(BasicWrapper):
     schema = Struct([
         required("schema", Schema),
-        required("datum", JSON)
+        optional("datum", JSON)
     ])
 
     @staticmethod
     def inflate(datum):
         return {
             "schema": datum["schema"],
-            "datum": datum["schema"].from_box(datum["datum"])
+            "datum": datum["schema"].from_box(datum.get("datum", None))
         }
 
     @staticmethod
@@ -577,9 +598,30 @@ class Dynamic(BasicWrapper):
         }
 
 
+class Maybe(ParametrizedWrapper):
+    schema = Dynamic
+
+    def inflate(self, datum):
+        if datum["schema"] == Nothing:
+            return None
+        elif Schema.to_json(datum["schema"]) == Schema.to_json(self.param):
+            return datum["datum"]
+        else:
+            raise ValidationError("Unexpected type", datum["schema"])
+
+    def deflate(self, datum):
+        return {
+            "schema": self.param,
+            "datum": datum
+        }
+
+
+
 
 
 BUILTIN_TYPES = {
+    "Maybe": (Maybe, Schema),
+    "Nothing": (Nothing, None),
     "Dynamic": (Dynamic, None),
     "Integer": (Integer, None),
     "Float": (Float, None),
