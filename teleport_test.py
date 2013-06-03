@@ -64,6 +64,7 @@ class TestSchema(TestCase):
         self.assertEqual(Schema.from_json({"type": u"Binary"}), Binary)
         self.assertEqual(Schema.from_json({"type": u"Schema"}), Schema)
         self.assertEqual(Schema.from_json({"type": u"JSON"}), JSON)
+        self.assertEqual(Schema.from_json({"type": u"Dynamic"}), Dynamic)
 
     def test_schema_duplicate_fields(self):
         s = deepcopy(struct_schema)
@@ -238,6 +239,21 @@ class TestStruct(TestCase):
         self.assertEqual(res, {"foo": True})
         res = struct_serializer.to_json({"foo": True, "bar": None})
         self.assertEqual(res, {"foo": True})
+
+
+class TestDynamic(TestCase):
+
+    def test_it(self):
+        j = {
+            "schema": {"type": "Integer"},
+            "datum": 1
+        }
+        n = {
+            "schema": Integer,
+            "datum": 1
+        }
+        self.assertEqual(Dynamic.from_json(j), n)
+        self.assertEqual(Dynamic.to_json(n), j)
 
 
 class Suit(BasicWrapper):

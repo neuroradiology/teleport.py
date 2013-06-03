@@ -534,7 +534,31 @@ class Schema(BasicPrimitive):
 
 
 
+class Dynamic(BasicWrapper):
+    schema = Struct([
+        required("schema", Schema),
+        required("datum", JSON)
+    ])
+
+    @staticmethod
+    def inflate(datum):
+        return {
+            "schema": datum["schema"],
+            "datum": datum["schema"].from_json(datum["datum"].datum)
+        }
+
+    @staticmethod
+    def deflate(datum):
+        return {
+            "schema": datum["schema"],
+            "datum": Box(datum["schema"].to_json(datum["datum"]))
+        }
+
+
+
+
 BUILTIN_TYPES = {
+    "Dynamic": (Dynamic, None),
     "Integer": (Integer, None),
     "Float": (Float, None),
     "String": (String, None),
