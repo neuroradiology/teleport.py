@@ -608,22 +608,24 @@ class Dynamic(BasicWrapper):
         }
 
 
-class Maybe(ParametrizedWrapper):
-    schema = Dynamic
+class Maybe(ParametrizedPrimitive):
 
-    def inflate(self, datum):
-        if datum["schema"] == Nothing:
+    def from_box(self, datum):
+        if datum == None:
             return None
-        elif Schema.to_json(datum["schema"]) == Schema.to_json(self.param):
+        datum = Dynamic.from_box(datum)
+        if Schema.to_json(datum["schema"]) == Schema.to_json(self.param):
             return datum["datum"]
         else:
             raise ValidationError("Unexpected type", datum["schema"])
 
-    def deflate(self, datum):
-        return {
-            "schema": self.param if datum != None else Nothing,
+    def to_box(self, datum):
+        if datum == None:
+            return None
+        return Dynamic.to_box({
+            "schema": self.param,
             "datum": datum
-        }
+        })
 
 
 

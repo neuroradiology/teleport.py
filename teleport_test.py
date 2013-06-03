@@ -263,14 +263,11 @@ class TestMaybe(TestCase):
             "schema": {"type": "Integer"},
             "datum": 1
         }
-        nothing = {
-            "schema": {"type": "Nothing"}
-        }
         m = Maybe(Integer)
         self.assertEqual(m.from_box(Box(j)), 1)
-        self.assertEqual(m.from_box(Box(nothing)), None)
+        self.assertEqual(m.from_box(None), None)
         self.assertEqual(m.to_box(1).datum, j)
-        self.assertEqual(m.to_box(None).datum, nothing)
+        self.assertEqual(m.to_box(None), None)
 
 
 class Suit(BasicWrapper):
