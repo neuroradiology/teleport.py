@@ -14,12 +14,8 @@ struct_schema = {
     "type": u"Struct",
     "param": {
         "map": {
-            u"foo": {
-                "schema": {"type": u"Boolean"}
-            },
-            u"bar": {
-                "schema": {"type": u"Maybe", "param": {"type": u"Integer"}}
-            }
+            u"foo": {"type": u"Boolean"},
+            u"bar": {"type": u"Maybe", "param": {"type": u"Integer"}}
         },
         "order": [u"foo", u"bar"]
     }
@@ -49,8 +45,8 @@ class TestSchema(TestCase):
         self.assertEqual(struct_schema, Schema.to_json(struct_serializer))
         self.assertEqual(deep_schema, Schema.to_json(deep_serializer))
         struct_s = Struct([
-            required(u"foo", Boolean),
-            required(u"bar", Maybe(Integer))
+            (u"foo", Boolean),
+            (u"bar", Maybe(Integer))
         ])
         self.assertEqual(Schema.to_json(struct_s), struct_schema)
 

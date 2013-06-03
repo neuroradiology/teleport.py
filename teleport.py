@@ -93,11 +93,6 @@ def _get_current_map():
         return _global_map
 
 
-# Some syntax sugar
-def required(name, schema):
-    return (name, {"schema": schema},)
-
-
 
 class ValidationError(Exception):
     """Raised during desearialization. Stores the location of the error in the
@@ -409,8 +404,7 @@ class Struct(ParametrizedPrimitive):
             extra = set(boxes.keys()) - set(self.param.keys())
             if extra:
                 raise ValidationError("Unexpected fields", list(extra))
-            for field, f in self.param.items():
-                schema = f["schema"]
+            for field, schema in self.param.items():
                 box = boxes.get(field, None)
                 try:
                     r = schema.from_box(box)
@@ -425,8 +419,7 @@ class Struct(ParametrizedPrimitive):
 
     def to_json(self, datum):
         ret = {}
-        for name, field in self.param.items():
-            schema = field['schema']
+        for name, schema in self.param.items():
             if name in datum.keys() and datum[name] != None:
                 b = schema.to_box(datum[name])
                 if b:
@@ -473,8 +466,8 @@ class OrderedMap(ParametrizedWrapper):
     Internal schema::
 
         Struct([
-            required(u"map", Map(param)),
-            required(u"order", Array(String))
+            (u"map", Map(param)),
+            (u"order", Array(String))
         ])
 
     The order of the items in *map* is not preserved by JSON, hence the
@@ -484,8 +477,8 @@ class OrderedMap(ParametrizedWrapper):
     def __init__(self, param):
         self.param = param
         self.schema = Struct([
-            required(u"map", Map(param)),
-            required(u"order", Array(String))
+            (u"map", Map(param)),
+            (u"order", Array(String))
         ])
 
     def inflate(self, datum):
@@ -594,8 +587,8 @@ class Maybe(ParametrizedPrimitive):
 
 class Dynamic(BasicWrapper):
     schema = Struct([
-        required("schema", Schema),
-        required("datum", Maybe(JSON))
+        ("schema", Schema),
+        ("datum", Maybe(JSON))
     ])
 
     @staticmethod
@@ -629,7 +622,5 @@ BUILTIN_TYPES = {
     "Array": (Array, Schema),
     "Map": (Map, Schema),
     "OrderedMap": (OrderedMap, Schema),
-    "Struct": (Struct, OrderedMap(Struct([
-        required(u"schema", Schema)
-    ])))
+    "Struct": (Struct, OrderedMap(Schema))
 }
