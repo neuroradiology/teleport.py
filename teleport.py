@@ -95,11 +95,8 @@ def _get_current_map():
 
 # Some syntax sugar
 def required(name, schema):
-    return (name, {"schema": schema, "required": True},)
+    return (name, {"schema": schema},)
 
-def optional(name, schema):
-    raise NotImplementedError()
-    return (name, {"schema": schema, "required": False},)
 
 
 class ValidationError(Exception):
@@ -409,17 +406,11 @@ class Struct(ParametrizedPrimitive):
                 if val != None:
                     boxes[key] = Box(val)
             ret = {}
-            required = {}
-            optional = {}
-            for name, field in self.param.items():
-                if field["required"] == True:
-                    required[name] = field["schema"]
-                else:
-                    optional[name] = field["schema"]
-            extra = set(boxes.keys()) - set(required.keys() + optional.keys())
+            extra = set(boxes.keys()) - set(self.param.keys())
             if extra:
                 raise ValidationError("Unexpected fields", list(extra))
-            for field, schema in optional.items() + required.items():
+            for field, f in self.param.items():
+                schema = f["schema"]
                 box = boxes.get(field, None)
                 try:
                     r = schema.from_box(box)
@@ -639,7 +630,6 @@ BUILTIN_TYPES = {
     "Map": (Map, Schema),
     "OrderedMap": (OrderedMap, Schema),
     "Struct": (Struct, OrderedMap(Struct([
-        required(u"schema", Schema),
-        required(u"required", Boolean)
+        required(u"schema", Schema)
     ])))
 }

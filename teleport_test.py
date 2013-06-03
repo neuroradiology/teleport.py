@@ -15,11 +15,9 @@ struct_schema = {
     "param": {
         "map": {
             u"foo": {
-                "required": True,
                 "schema": {"type": u"Boolean"}
             },
             u"bar": {
-                "required": True,
                 "schema": {"type": u"Maybe", "param": {"type": u"Integer"}}
             }
         },
