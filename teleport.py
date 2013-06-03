@@ -613,19 +613,12 @@ class Maybe(ParametrizedPrimitive):
     def from_box(self, datum):
         if datum == None:
             return None
-        datum = Dynamic.from_box(datum)
-        if Schema.to_json(datum["schema"]) == Schema.to_json(self.param):
-            return datum["datum"]
-        else:
-            raise ValidationError("Unexpected type", datum["schema"])
+        return self.param.from_box(datum)
 
     def to_box(self, datum):
         if datum == None:
             return None
-        return Dynamic.to_box({
-            "schema": self.param,
-            "datum": datum
-        })
+        return self.param.to_box(datum)
 
 
 

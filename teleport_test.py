@@ -259,14 +259,10 @@ class TestDynamic(TestCase):
 class TestMaybe(TestCase):
 
     def test_it(self):
-        j = {
-            "schema": {"type": "Integer"},
-            "datum": 1
-        }
         m = Maybe(Integer)
-        self.assertEqual(m.from_box(Box(j)), 1)
+        self.assertEqual(m.from_box(Box(1)), 1)
         self.assertEqual(m.from_box(None), None)
-        self.assertEqual(m.to_box(1).datum, j)
+        self.assertEqual(m.to_box(1).datum, 1)
         self.assertEqual(m.to_box(None), None)
 
 
