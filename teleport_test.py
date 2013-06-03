@@ -206,16 +206,16 @@ class TestOrderedMap(TestCase):
             (u"groovy", True,),
             (u"hip", False,)
         ])
-        self.assertEqual(ordered_map_serializer.from_json(m), md)
-        self.assertEqual(ordered_map_serializer.to_json(md), m)
+        self.assertEqual(ordered_map_serializer.from_box(Box(m)), md)
+        self.assertEqual(ordered_map_serializer.to_box(md).datum, m)
         with self.assertRaisesRegexp(ValidationError, "Invalid OrderedMap"):
             m2 = deepcopy(m)
             m2["order"].append(u"cool")
-            ordered_map_serializer.from_json(m2)
+            ordered_map_serializer.from_box(Box(m2))
         with self.assertRaisesRegexp(ValidationError, "Invalid OrderedMap"):
             m2 = deepcopy(m)
             m2["order"] = [u"cool", u"groovy", u"kewl"]
-            ordered_map_serializer.from_json(m2)
+            ordered_map_serializer.from_box(Box(m2))
 
 
 class TestStruct(TestCase):
@@ -252,8 +252,8 @@ class TestDynamic(TestCase):
             "schema": Integer,
             "datum": 1
         }
-        self.assertEqual(Dynamic.from_json(j), n)
-        self.assertEqual(Dynamic.to_json(n), j)
+        self.assertEqual(Dynamic.from_box(Box(j)), n)
+        self.assertEqual(Dynamic.to_box(n).datum, j)
 
 
 class TestMaybe(TestCase):
@@ -268,10 +268,10 @@ class TestMaybe(TestCase):
             "datum": None
         }
         m = Maybe(Integer)
-        self.assertEqual(m.from_json(j), 1)
-        self.assertEqual(m.from_json(nothing), None)
-        self.assertEqual(m.to_json(1), j)
-        self.assertEqual(m.to_json(None), nothing)
+        self.assertEqual(m.from_box(Box(j)), 1)
+        self.assertEqual(m.from_box(Box(nothing)), None)
+        self.assertEqual(m.to_box(1).datum, j)
+        self.assertEqual(m.to_box(None).datum, nothing)
 
 
 class Suit(BasicWrapper):
@@ -291,13 +291,13 @@ class TestSuits(TestCase):
 
     def test_from_json(self):
         suits = ["hearts", "clubs", "clubs"]
-        self.assertEqual(SuitArray.from_json(suits), suits)
+        self.assertEqual(SuitArray.from_box(Box(suits)), suits)
         with self.assertRaisesRegexp(ValidationError, "Invalid Suit"):
             suits = ["hearts", "clubs", "clubz"]
-            self.assertEqual(SuitArray.from_json(suits), suits)
+            self.assertEqual(SuitArray.from_box(Box(suits)), suits)
 
     def test_to_json(self):
-        self.assertEqual(Suit.to_json(u"hearts"), u"hearts")
+        self.assertEqual(Suit.to_box(u"hearts").datum, u"hearts")
 
 
 class AllSuits(TypeMap):

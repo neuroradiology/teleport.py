@@ -170,14 +170,14 @@ class Parametrized(object):
 class BasicWrapper(Basic):
 
     @classmethod
-    def from_json(cls, datum):
-        datum = cls.schema.from_json(datum)
+    def from_box(cls, datum):
+        datum = cls.schema.from_box(datum)
         return cls.inflate(datum)
 
     @classmethod
-    def to_json(cls, datum):
+    def to_box(cls, datum):
         datum = cls.deflate(datum)
-        return cls.schema.to_json(datum)
+        return cls.schema.to_box(datum)
 
     @classmethod
     def inflate(cls, datum): # pragma: no cover
@@ -191,13 +191,13 @@ class BasicWrapper(Basic):
 
 class ParametrizedWrapper(Parametrized):
 
-    def from_json(self, datum):
-        datum = self.schema.from_json(datum)
+    def from_box(self, datum):
+        datum = self.schema.from_box(datum)
         return self.inflate(datum)
 
-    def to_json(self, datum):
+    def to_box(self, datum):
         datum = self.deflate(datum)
-        return self.schema.to_json(datum)
+        return self.schema.to_box(datum)
 
     def inflate(self, datum): # pragma: no cover
         return datum
@@ -399,6 +399,10 @@ class Struct(ParametrizedPrimitive):
            by the *schema* of the corresponding field.
         """
         if type(datum) == dict:
+            boxes = {}
+            for key, val in datum.items():
+                if val != None:
+                    boxes[key] = Box(val)
             ret = {}
             required = {}
             optional = {}
@@ -407,16 +411,16 @@ class Struct(ParametrizedPrimitive):
                     required[name] = field["schema"]
                 else:
                     optional[name] = field["schema"]
-            missing = set(required.keys()) - set(datum.keys())
+            missing = set(required.keys()) - set(boxes.keys())
             if missing:
                 raise ValidationError("Missing fields", list(missing))
-            extra = set(datum.keys()) - set(required.keys() + optional.keys())
+            extra = set(boxes.keys()) - set(required.keys() + optional.keys())
             if extra:
                 raise ValidationError("Unexpected fields", list(extra))
             for field, schema in optional.items() + required.items():
-                if field in datum.keys():
+                if field in boxes.keys():
                     try:
-                        ret[field] = schema.from_box(Box(datum[field]))
+                        ret[field] = schema.from_box(boxes.get(field, None))
                     except ValidationError as e:
                         e.stack.append(field)
                         raise
@@ -530,7 +534,7 @@ class Schema(BasicPrimitive):
         if param_schema != None:
             return {
                 "type": type_name,
-                "param": param_schema.to_json(datum.param)
+                "param": param_schema.to_box(datum.param).datum
             }
         else:
             return {"type": type_name}
@@ -611,7 +615,7 @@ class Maybe(ParametrizedWrapper):
 
     def deflate(self, datum):
         return {
-            "schema": self.param,
+            "schema": self.param if datum != None else Nothing,
             "datum": datum
         }
 
