@@ -140,7 +140,29 @@ class UnknownTypeValidationError(ValidationError):
 
 
 
-class BasicWrapper(object):
+class Basic(object):
+
+    @classmethod
+    def from_box(cls, box):
+        return cls.from_json(box.datum)
+
+    @classmethod
+    def to_box(cls, datum):
+        return Box(cls.to_json(datum))
+
+
+
+class Parametrized(object):
+
+    def from_box(self, box):
+        return self.from_json(box.datum)
+
+    def to_box(self, datum):
+        return Box(self.to_json(datum))
+
+
+
+class BasicWrapper(Basic):
 
     @classmethod
     def from_json(cls, datum):
@@ -162,7 +184,7 @@ class BasicWrapper(object):
 
 
 
-class ParametrizedWrapper(object):
+class ParametrizedWrapper(Parametrized):
 
     def from_json(self, datum):
         datum = self.schema.from_json(datum)
@@ -180,7 +202,7 @@ class ParametrizedWrapper(object):
 
 
 
-class BasicPrimitive(object):
+class BasicPrimitive(Basic):
 
     @staticmethod
     def from_json(datum): # pragma: no cover
@@ -192,7 +214,7 @@ class BasicPrimitive(object):
 
 
 
-class ParametrizedPrimitive(object):
+class ParametrizedPrimitive(Parametrized):
 
     def __init__(self, param):
         self.param = param
@@ -328,7 +350,7 @@ class Array(ParametrizedPrimitive):
             ret = []
             for i, item in enumerate(datum):
                 try:
-                    ret.append(self.param.from_json(item))
+                    ret.append(self.param.from_box(Box(item)))
                 except ValidationError as e:
                     e.stack.append(i)
                     raise
@@ -387,7 +409,7 @@ class Struct(ParametrizedPrimitive):
             for field, schema in optional.items() + required.items():
                 if field in datum.keys():
                     try:
-                        ret[field] = schema.from_json(datum[field])
+                        ret[field] = schema.from_box(Box(datum[field]))
                     except ValidationError as e:
                         e.stack.append(field)
                         raise
@@ -421,7 +443,7 @@ class Map(ParametrizedPrimitive):
                 if type(key) != unicode:
                     raise ValidationError("Map key must be unicode", key)
                 try:
-                    ret[key] = self.param.from_json(val)
+                    ret[key] = self.param.from_box(Box(val))
                 except ValidationError as e:
                     e.stack.append(key)
                     raise
@@ -527,7 +549,7 @@ class Schema(BasicPrimitive):
 
         # Deserialize or instantiate
         if param_schema != None:
-            param = param_schema.from_json(datum["param"])
+            param = param_schema.from_box(Box(datum["param"]))
             return serializer(param)
         else:
             return serializer
@@ -544,14 +566,14 @@ class Dynamic(BasicWrapper):
     def inflate(datum):
         return {
             "schema": datum["schema"],
-            "datum": datum["schema"].from_json(datum["datum"].datum)
+            "datum": datum["schema"].from_box(datum["datum"])
         }
 
     @staticmethod
     def deflate(datum):
         return {
             "schema": datum["schema"],
-            "datum": Box(datum["schema"].to_json(datum["datum"]))
+            "datum": datum["schema"].to_box(datum["datum"])
         }
 
 
