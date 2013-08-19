@@ -140,17 +140,19 @@ class UnknownTypeValidationError(ValidationError):
 
 
 
+def to_json(schema, datum):
+    if schema.__class__ is type and BasicWrapper in schema.__bases__:
+        return to_json(schema.schema, schema.disassemble(datum))
+    return schema.to_json(datum)
+
+def from_json(schema, datum):
+    if schema.__class__ is type and BasicWrapper in schema.__bases__:
+        return schema.assemble(from_json(schema.schema, datum))
+    return schema.from_json(datum)
+
+
+
 class BasicWrapper(object):
-
-    @classmethod
-    def from_json(cls, datum):
-        datum = cls.schema.from_json(datum)
-        return cls.assemble(datum)
-
-    @classmethod
-    def to_json(cls, datum):
-        datum = cls.disassemble(datum)
-        return cls.schema.to_json(datum)
 
     @classmethod
     def assemble(cls, datum): # pragma: no cover
@@ -165,12 +167,12 @@ class BasicWrapper(object):
 class ParametrizedWrapper(object):
 
     def from_json(self, datum):
-        datum = self.schema.from_json(datum)
+        datum = from_json(self.schema, datum)
         return self.assemble(datum)
 
     def to_json(self, datum):
         datum = self.disassemble(datum)
-        return self.schema.to_json(datum)
+        return to_json(self.schema, datum)
 
     def assemble(self, datum): # pragma: no cover
         return datum
@@ -328,7 +330,7 @@ class Array(ParametrizedPrimitive):
             ret = []
             for i, item in enumerate(datum):
                 try:
-                    ret.append(self.param.from_json(item))
+                    ret.append(from_json(self.param, item))
                 except ValidationError as e:
                     e.stack.append(i)
                     raise
@@ -339,7 +341,7 @@ class Array(ParametrizedPrimitive):
         """Serialize each item in the *datum* iterable using *param*. Return
         the resulting values in a list.
         """
-        return [self.param.to_json(item) for item in datum]
+        return [to_json(self.param, item) for item in datum]
 
 
 
@@ -387,7 +389,7 @@ class Struct(ParametrizedPrimitive):
             for field, schema in optional.items() + required.items():
                 if field in datum.keys():
                     try:
-                        ret[field] = schema.from_json(datum[field])
+                        ret[field] = from_json(schema, datum[field])
                     except ValidationError as e:
                         e.stack.append(field)
                         raise
@@ -400,7 +402,7 @@ class Struct(ParametrizedPrimitive):
         for name, field in self.param.items():
             schema = field['schema']
             if name in datum.keys() and datum[name] != None:
-                ret[name] = schema.to_json(datum[name])
+                ret[name] = to_json(schema, datum[name])
         return ret
 
 
@@ -421,7 +423,7 @@ class Map(ParametrizedPrimitive):
                 if type(key) != unicode:
                     raise ValidationError("Map key must be unicode", key)
                 try:
-                    ret[key] = self.param.from_json(val)
+                    ret[key] = from_json(self.param, val)
                 except ValidationError as e:
                     e.stack.append(key)
                     raise
@@ -431,7 +433,7 @@ class Map(ParametrizedPrimitive):
     def to_json(self, datum):
         ret = {}
         for key, val in datum.items():
-            ret[key] = self.param.to_json(val)
+            ret[key] = to_json(self.param, val)
         return ret
 
 
@@ -501,7 +503,7 @@ class Schema(BasicPrimitive):
         if param_schema != None:
             return {
                 "type": type_name,
-                "param": param_schema.to_json(datum.param)
+                "param": to_json(param_schema, datum.param)
             }
         else:
             return {"type": type_name}
@@ -533,7 +535,7 @@ class Schema(BasicPrimitive):
 
         # Deserialize or instantiate
         if param_schema != None:
-            param = param_schema.from_json(datum["param"])
+            param = from_json(param_schema, datum["param"])
             return serializer(param)
         else:
             return serializer
