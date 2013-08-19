@@ -280,53 +280,28 @@ class TestSuits(TestCase):
         self.assertEqual(Suit.to_json(u"hearts"), u"hearts")
 
 
-class AllSuits(TypeMap):
-
-    def __getitem__(self, name):
-        if name == "Array":
-            return BUILTIN_TYPES["Array"]
-        elif name == "suit":
-            return (Suit, None,)
-        else:
-            raise KeyError()
-
+class SuitSchema(Schema):
+    types = {
+        "Array": Schema.types["Array"],
+        "Suit": (Suit, None,)
+    }
 
 class TestTypeMap(TestCase):
 
     def test_custom_type_map_okay(self):
 
-        with AllSuits():
-            self.assertEqual(Schema.from_json({
-                "type": "suit"
-            }), Suit)
-            self.assertEqual(Schema.from_json({
-                "type": "Array",
-                "param": {"type": "suit"}
-            }).__class__, Array)
+        self.assertEqual(SuitSchema.from_json({
+            "type": "Suit"
+        }), Suit)
+        self.assertEqual(SuitSchema.from_json({
+            "type": "Array",
+            "param": {"type": "Suit"}
+        }).__class__, Array)
 
     def test_custom_type_map_fail(self):
 
         Schema.from_json({"type": "Integer"})
 
         with self.assertRaises(UnknownTypeValidationError):
-            with AllSuits():
-                Schema.from_json({"type": "Integer"})
-
-    def test_wsgi_middleware(self):
-        # Inspired by https://github.com/mitsuhiko/werkzeug/blob/master/werkzeug/testapp.py
-        from werkzeug.wrappers import BaseResponse
-        from werkzeug.test import Client
-
-        def test_app(environ, start_response):
-            # Needs to access AllSuits
-            S = Schema.from_json({"type": "suit"})
-            response = BaseResponse(S.__name__, mimetype="text/plain")
-            return response(environ, start_response)
-
-        test_app = AllSuits().middleware(test_app)
-
-        c = Client(test_app, BaseResponse)
-        resp = c.get('/')
-
-        self.assertEqual(resp.data, "Suit")
+            SuitSchema.from_json({"type": "Integer"})
 

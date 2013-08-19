@@ -4,95 +4,6 @@ from collections import OrderedDict
 from werkzeug.local import LocalStack
 
 
-class TypeMap(object):
-    """Teleport is made extendable by allowing the application to define a
-    custom mapping of type names (strings such as ``"Integer"``) to serializer
-    classes. I could have defined a global mapping object for all applications
-    to share, like Python's own :keyword:`sys.modules`, but this would
-    prohibit multiple Teleport extentions to operate in clean isolation.
-    Global state is evil, and Teleport successfully avoids it using Werkzeug's
-    brilliant `Context Locals <http://werkzeug.pocoo.org/docs/local/>`_.
-
-    To extend Teleport with your custom type, subclass :class:`TypeMap`::
-
-        class ExtendedTypeMap(TypeMap):
-
-            def __getitem__(self, name):
-                if name == "YesNoMaybe":
-                    return (YesNoMaybe, None,)
-                else:
-                    return BUILTIN_TYPES[name]
-
-    :class:`ExtendedTypeMap` is an extention of Teleport, to enable it within
-    a specific code block, use Python's :keyword:`with` statement::
-
-        # Only built-in types accessible here
-        with ExtendedTypeMap():
-            # Built-in types as well as "YesNoMaybe" are accessible
-            with TypeMap():
-                # Only built-in types here
-                pass
-
-    To avoid repeating this :keyword:`with` statement, put it at the entry
-    point of your program. If your program is a WSGI server, use the
-    :meth:`middleware` method to set the mapping for the entire
-    application.
-
-    If you are planning to serialize schemas containing custom types, Teleport
-    will get the type name from the serializer class (it can also be overridden
-    with the :attr:`type_name` attribute)::
-
-        >>> Schema.to_json(YesNoMaybe)
-        {'type': 'YesNoMaybe'}
-
-    When you deserialize it (whether it is done by the same program or by a
-    different program entirely), you need to ensure it will have access to
-    the custom types that you defined.
-    """
-
-    def __getitem__(self, name):
-        return BUILTIN_TYPES[name]
-
-    def middleware(self, wsgi_app):
-        """To use in `Flask <http://flask.pocoo.org/>`_::
-
-            app = Flask(__name__)
-
-            app.wsgi_app = ExtendedTypeMap().middleware(app.wsgi_app)
-            app.run()
-
-        In `Django <https://www.djangoproject.com/>`_ (see the
-        auto-generated ``wsgi.py`` module)::
-
-            from django.core.wsgi import get_wsgi_application
-            application = get_wsgi_application()
-            application = ExtendedTypeMap().middleware(application)
-
-        """
-        def wrapped(environ, start_response):
-            with self:
-                return wsgi_app(environ, start_response)
-        return wrapped
-
-    def __enter__(self):
-        _ctx_stack.push(self)
-        return self
-
-    def __exit__(self, exc_type, exc_value, tb):
-        _ctx_stack.pop()
-
-
-_ctx_stack = LocalStack()
-# If no TypeMap is found on the stack, use the global object
-_global_map = TypeMap()
-
-def _get_current_map():
-    if _ctx_stack.top != None:
-        return _ctx_stack.top
-    else:
-        return _global_map
-
-
 # Some syntax sugar
 def required(name, schema, doc=None):
     return (name, {"schema": schema, "required": True, "doc": doc})
@@ -482,8 +393,8 @@ class OrderedMap(ParametrizedWrapper):
 
 class Schema(BasicPrimitive):
 
-    @staticmethod
-    def to_json(datum):
+    @classmethod
+    def to_json(cls, datum):
         """If the serializer passed in as *datum* has a :meth:`serialize_self`
         method, use it. Otherwise, return a simple schema by finding the type
         in the serializer's :attr:`type_name` attribute.
@@ -497,7 +408,7 @@ class Schema(BasicPrimitive):
         # Otherwise assume it's an instance
         else:
             type_name = datum.__class__.__name__
-        param_schema = _get_current_map()[type_name][1]
+        param_schema = cls.types[type_name][1]
         if param_schema != None:
             return {
                 "type": type_name,
@@ -506,8 +417,8 @@ class Schema(BasicPrimitive):
         else:
             return {"type": type_name}
 
-    @staticmethod
-    def from_json(datum):
+    @classmethod
+    def from_json(cls, datum):
         """Datum must be a dict with a key *type* that has a string value.
         This value will me passed into the :meth:`get` method of the current
         :class:`TypeMap` instance to get the matching serializer. If no serializer
@@ -520,10 +431,13 @@ class Schema(BasicPrimitive):
         t = datum["type"]
 
         # Try to get the serializer class from the current TypeMap
-        try:
-            serializer, param_schema = _get_current_map()[t]
-        except KeyError:
-            raise UnknownTypeValidationError("Unknown type", t)
+        if t == "Schema":
+            serializer, param_schema = (cls, None)
+        else:
+            try:
+                serializer, param_schema = cls.types[t]
+            except KeyError:
+                raise UnknownTypeValidationError("Unknown type", t)
 
         if param_schema and "param" not in datum:
             raise ValidationError("Missing param for %s schema" % t)
@@ -539,8 +453,7 @@ class Schema(BasicPrimitive):
             return serializer
 
 
-
-BUILTIN_TYPES = {
+Schema.types = {
     "Integer": (Integer, None),
     "Float": (Float, None),
     "String": (String, None),
@@ -557,3 +470,4 @@ BUILTIN_TYPES = {
         optional(u"doc", String)
     ])))
 }
+
