@@ -40,9 +40,9 @@ class UnicodeDecodeValidationError(ValidationError):
 
 
 def integer_from_json(datum):
-    """If *datum* is an integer, return it; if it is a float with a 0 for
-    its fractional part, return the integer part as an int. Otherwise,
-    raise a :exc:`ValidationError`.
+    """If *datum* is an integer, return it; if it is a float with a 0 for its
+    fractional part, return the integer part as an int. Otherwise, raise a
+    :exc:`ValidationError`.
     """
     if type(datum) == int:
         return datum
@@ -61,8 +61,8 @@ def float_from_json(datum):
     raise ValidationError("Invalid Float", datum)
 
 def string_from_json(datum):
-    """If *datum* is of unicode type, return it. If it is a string, decode
-    it as UTF-8 and return the result. Otherwise, raise a
+    """If *datum* is of unicode type, return it. If it is a string, decode it
+    as UTF-8 and return the result. Otherwise, raise a
     :exc:`ValidationError`. Unicode errors are dealt
     with strictly by raising :exc:`UnicodeDecodeValidationError`, a
     subclass of the above.
@@ -77,8 +77,8 @@ def string_from_json(datum):
     raise ValidationError("Invalid String", datum)
 
 def binary_from_json(datum):
-    """If *datum* is a base64-encoded string, decode and return it. If not
-    a string, or encoding is wrong, raise :exc:`ValidationError`.
+    """If *datum* is a base64-encoded string, decode and return it. If not a
+    string, or encoding is wrong, raise :exc:`ValidationError`.
     """
     if type(datum) in (str, unicode,):
         try:
@@ -120,10 +120,10 @@ def json_to_json(datum):
     return datum.datum
 
 def array_from_json(datum, param):
-    """If *datum* is a list, construct a new list by putting each element
-    of *datum* through a serializer provided as *param*. This serializer
-    may raise a :exc:`ValidationError`. If *datum* is not a
-    list, :exc:`ValidationError` will also be raised.
+    """If *datum* is a list, construct a new list by putting each element of
+    *datum* through a serializer provided as *param*. This serializer may
+    raise a :exc:`ValidationError`. If *datum* is not a list,
+    :exc:`ValidationError` will also be raised.
     """
     if type(datum) == list:
         ret = []
@@ -144,8 +144,8 @@ def array_to_json(datum, param):
     return [param.to_json(item) for item in datum]
 
 def struct_from_json(datum, param):
-    """If *datum* is a dict, deserialize it against *param* and return
-    the resulting dict. Otherwise raise a :exc:`ValidationError`.
+    """If *datum* is a dict, deserialize it against *param* and return the
+    resulting dict. Otherwise raise a :exc:`ValidationError`.
 
     A :exc:`ValidationError` will be raised if:
 
@@ -212,6 +212,11 @@ def map_to_json(datum, param):
         ret[key] = param.to_json(val)
     return ret
 
+def assemble_even(datum):
+    if datum % 2 != 0:
+        raise ValidationError("Not even")
+    return datum
+
 Integer = {"type": "Integer"}
 Float = {"type": "Float"}
 String = {"type": "String"}
@@ -229,14 +234,14 @@ def identity(datum):
 class T(object):
 
     types = {
-        "Integer": (None, integer_from_json, identity),
-        "Float": (None, float_from_json, identity),
-        "String": (None, string_from_json, identity),
-        "Boolean": (None, boolean_from_json, identity),
-        "Binary": (None, binary_from_json, binary_to_json),
-        "JSON": (None, json_from_json, json_to_json),
-        "Array": (Schema, array_from_json, array_to_json),
-        "Map": (Schema, map_from_json, map_to_json),
+        "Integer": (None, None, integer_from_json, identity),
+        "Float": (None, None, float_from_json, identity),
+        "String": (None, None, string_from_json, identity),
+        "Boolean": (None, None, boolean_from_json, identity),
+        "Binary": (None, None, binary_from_json, binary_to_json),
+        "JSON": (None, None, json_from_json, json_to_json),
+        "Array": (None, Schema, array_from_json, array_to_json),
+        "Map": (None, Schema, map_from_json, map_to_json),
     }
 
     def __init__(self, json_schema):
@@ -248,13 +253,34 @@ class T(object):
             self.to_json = lambda datum: datum.json_schema
             return
 
-        param_schema, from_json, to_json = self.types[self.type_name]
+        wrap_schema, param_schema, fro, to = self.types[self.type_name]
 
-        if param_schema is None:
-            self.from_json = from_json
-            self.to_json = to_json
+        if wrap_schema is not None:
+            wrap = self.__class__(wrap_schema)
         else:
-            param = T(param_schema).from_json(json_schema["param"])
-            self.from_json = lambda datum: from_json(datum, param)
-            self.to_json = lambda datum: to_json(datum, param)
+            wrap = None
+
+        if param_schema is not None:
+            param = self.__class__(param_schema).from_json(json_schema["param"])
+        else:
+            param = None
+
+        if param is None:
+            if wrap is None:
+                # Simple primitive
+                self.from_json = fro
+                self.to_json = to
+            else:
+                # Simple wrapper
+                self.from_json = lambda datum: fro(wrap.from_json(datum))
+                self.to_json = lambda datum: wrap.to_json(to(datum))
+        else:
+            if wrap is None:
+                # Parametrized primitive
+                self.from_json = lambda datum: fro(datum, param)
+                self.to_json = lambda datum: to(datum, param)
+            else:
+                # Parametrized wrapper
+                self.from_json = lambda datum: fro(wrap.from_json(datum), param)
+                self.to_json = lambda datum: wrap.to_json(to(datum, param))
 
