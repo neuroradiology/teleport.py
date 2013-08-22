@@ -188,6 +188,28 @@ def struct_to_json(datum, param):
             ret[name] = schema.to_json(datum[name])
     return ret
 
+
+def assemble_ordered_map(self, datum):
+    """:exc:`ValidationError` is raised if *order* does not correspond to
+    the keys in *map*. The native form is Python's :class:`OrderedDict`.
+    """
+    order = datum["order"]
+    keys = datum["map"].keys()
+    if len(order) != len(keys) or set(order) != set(keys):
+        raise ValidationError("Invalid OrderedMap", datum)
+    # Turn into OrderedDict instance
+    ret = OrderedDict()
+    for key in order:
+        ret[key] = datum["map"][key]
+    return ret
+
+def disassemble_ordered_map(self, datum):
+    return {
+        "map": dict(datum.items()),
+        "order": datum.keys()
+    }
+
+
 def map_from_json(datum, param):
     """If *datum* is a dict, deserialize it, otherwise raise a
     :exc:`ValidationError`. The keys of the dict must be unicode, and the
@@ -217,6 +239,13 @@ def assemble_even(datum):
         raise ValidationError("Not even")
     return datum
 
+# Some syntax sugar
+def required(name, schema, doc=None):
+    return (name, {"schema": schema, "required": True, "doc": doc})
+
+def optional(name, schema, doc=None):
+    return (name, {"schema": schema, "required": False, "doc": doc})
+
 Integer = {"type": "Integer"}
 Float = {"type": "Float"}
 String = {"type": "String"}
@@ -224,8 +253,18 @@ Boolean = {"type": "Boolean"}
 Binary = {"type": "Binary"}
 JSON = {"type": "JSON"}
 Schema = {"type": "Schema"}
-Array = lambda param: {"type": "Array", "param": param}
-Map = lambda param: {"type": "Map", "param": param}
+def Array(param):
+    return {"type": "Array", "param": param}
+def Map(param):
+    return {"type": "Map", "param": param}
+def OrderedMap(param):
+    return {"type": "OrderedMap", "param": param}
+def Struct(fields):
+    m = OrderedDict(fields)
+    return {"type": "Struct", "param": {
+        "map": dict(m),
+        "order": m.keys()
+    }}
 
 
 def identity(datum):
