@@ -4,6 +4,40 @@ from copy import deepcopy
 
 from teleport import *
 
+struct_schema_json = {
+    "type": u"Struct",
+    "param": {
+        "map": {
+            u"foo": {
+                "required": True,
+                "schema": {"type": u"Boolean"},
+                "doc": u"Never gonna give you up"
+            },
+            u"bar": {
+                "required": False,
+                "schema": {"type": u"Integer"}
+            }
+        },
+        "order": [u"foo", u"bar"]
+    }
+}
+struct_schema = from_json(Schema, struct_schema_json)
+
+class TestStruct(TestCase):
+
+    def test_from_json(self):
+        res = from_json(struct_schema, {"foo": True, "bar": 2.0})
+        self.assertEqual(res, {"foo": True, "bar": 2})
+        res = from_json(struct_schema, {"foo": True})
+        self.assertEqual(res, {"foo": True})
+
+    def test_from_json_fail(self):
+        with self.assertRaisesRegexp(ValidationError, "Invalid Struct"):
+            from_json(struct_schema, [])
+        with self.assertRaisesRegexp(ValidationError, "Unexpected fields"):
+            from_json(struct_schema, {"foo": True, "barr": 2.0})
+        with self.assertRaisesRegexp(ValidationError, "Missing fields"):
+            from_json(struct_schema, {"bar": 2})
 
 class TestBoolean(TestCase):
 
