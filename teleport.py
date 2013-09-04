@@ -39,26 +39,6 @@ class UnicodeDecodeValidationError(ValidationError):
     pass
 
 
-def integer_from_json(datum):
-    """If *datum* is an integer, return it; if it is a float with a 0 for its
-    fractional part, return the integer part as an int. Otherwise, raise a
-    :exc:`ValidationError`.
-    """
-    if type(datum) == int:
-        return datum
-    if type(datum) == float and datum.is_integer():
-        return int(datum)
-    raise ValidationError("Invalid Integer", datum)
-
-def float_from_json(datum):
-    """If *datum* is a float, return it; if it is an integer, cast it to a
-    float and return it. Otherwise, raise a :exc:`ValidationError`.
-    """
-    if type(datum) == float:
-        return datum
-    if type(datum) == int:
-        return float(datum)
-    raise ValidationError("Invalid Float", datum)
 
 def string_from_json(datum):
     """If *datum* is of unicode type, return it. If it is a string, decode it
@@ -76,21 +56,6 @@ def string_from_json(datum):
             raise UnicodeDecodeValidationError(unicode(inst))
     raise ValidationError("Invalid String", datum)
 
-def binary_from_json(datum):
-    """If *datum* is a base64-encoded string, decode and return it. If not a
-    string, or encoding is wrong, raise :exc:`ValidationError`.
-    """
-    if type(datum) in (str, unicode,):
-        try:
-            return base64.b64decode(datum)
-        except TypeError:
-            raise ValidationError("Invalid base64 encoding", datum)
-    raise ValidationError("Invalid Binary data", datum)
-
-def binary_to_json(datum):
-    "Encode *datum* using base64."
-    return base64.b64encode(datum)
-
 def boolean_from_json(datum):
     """If *datum* is a boolean, return it. Otherwise, raise a
     :exc:`ValidationError`.
@@ -99,27 +64,7 @@ def boolean_from_json(datum):
         return datum
     raise ValidationError("Invalid Boolean", datum)
 
-class Box(object):
-    """Used as a wrapper around JSON data to disambiguate None as a JSON value
-    (``null``) from None as an absense of value. Its :attr:`datum` attribute
-    will hold the actual JSON value.
-
-    For example, an HTTP request body may be empty in which case your function
-    may return ``None`` or it may be "null", in which case the function can
-    return a :class:`Box` instance with ``None`` inside.
-    """
-    def __init__(self, datum):
-        self.datum = datum
-
-def json_from_json(datum):
-    """Return the JSON value wrapped in a :class:`Box`.
-    """
-    return Box(datum)
-
-def json_to_json(datum):
-    return datum.datum
-
-def array_from_json(datum, param):
+def array_from_json(datum, param, from_json):
     """If *datum* is a list, construct a new list by putting each element of
     *datum* through a serializer provided as *param*. This serializer may
     raise a :exc:`ValidationError`. If *datum* is not a list,
@@ -129,13 +74,12 @@ def array_from_json(datum, param):
         ret = []
         for i, item in enumerate(datum):
             try:
-                ret.append(param.from_json(item))
+                ret.append(from_json(param, item))
             except ValidationError as e:
                 e.stack.append(i)
                 raise
         return ret
     raise ValidationError("Invalid Array", datum)
-
 
 def array_to_json(datum, param):
     """Serialize each item in the *datum* iterable using *param*. Return
@@ -143,7 +87,7 @@ def array_to_json(datum, param):
     """
     return [param.to_json(item) for item in datum]
 
-def struct_from_json(datum, param):
+def struct_from_json(datum, param, from_json):
     """If *datum* is a dict, deserialize it against *param* and return the
     resulting dict. Otherwise raise a :exc:`ValidationError`.
 
@@ -172,7 +116,7 @@ def struct_from_json(datum, param):
         for field, schema in optional.items() + required.items():
             if field in datum.keys():
                 try:
-                    ret[field] = schema.from_json(datum[field])
+                    ret[field] = from_json(schema, datum[field])
                 except ValidationError as e:
                     e.stack.append(field)
                     raise
@@ -189,7 +133,7 @@ def struct_to_json(datum, param):
     return ret
 
 
-def assemble_ordered_map(self, datum):
+def assemble_ordered_map(datum):
     """:exc:`ValidationError` is raised if *order* does not correspond to
     the keys in *map*. The native form is Python's :class:`OrderedDict`.
     """
@@ -203,14 +147,14 @@ def assemble_ordered_map(self, datum):
         ret[key] = datum["map"][key]
     return ret
 
-def disassemble_ordered_map(self, datum):
+def disassemble_ordered_map(datum):
     return {
         "map": dict(datum.items()),
         "order": datum.keys()
     }
 
 
-def map_from_json(datum, param):
+def map_from_json(datum, param, from_json):
     """If *datum* is a dict, deserialize it, otherwise raise a
     :exc:`ValidationError`. The keys of the dict must be unicode, and the
     values will be deserialized using *param*.
@@ -221,7 +165,7 @@ def map_from_json(datum, param):
             if type(key) != unicode:
                 raise ValidationError("Map key must be unicode", key)
             try:
-                ret[key] = param.from_json(val)
+                ret[key] = from_json(param, val)
             except ValidationError as e:
                 e.stack.append(key)
                 raise
@@ -246,80 +190,75 @@ def required(name, schema, doc=None):
 def optional(name, schema, doc=None):
     return (name, {"schema": schema, "required": False, "doc": doc})
 
-Integer = {"type": "Integer"}
-Float = {"type": "Float"}
-String = {"type": "String"}
-Boolean = {"type": "Boolean"}
-Binary = {"type": "Binary"}
-JSON = {"type": "JSON"}
-Schema = {"type": "Schema"}
-def Array(param):
-    return {"type": "Array", "param": param}
-def Map(param):
-    return {"type": "Map", "param": param}
-def OrderedMap(param):
-    return {"type": "OrderedMap", "param": param}
-def Struct(fields):
-    m = OrderedDict(fields)
-    return {"type": "Struct", "param": {
-        "map": dict(m),
-        "order": m.keys()
-    }}
-
 
 def identity(datum):
     return datum
 
-class T(object):
 
-    types = {
-        "Integer": (None, None, integer_from_json, identity),
-        "Float": (None, None, float_from_json, identity),
-        "String": (None, None, string_from_json, identity),
-        "Boolean": (None, None, boolean_from_json, identity),
-        "Binary": (None, None, binary_from_json, binary_to_json),
-        "JSON": (None, None, json_from_json, json_to_json),
-        "Array": (None, Schema, array_from_json, array_to_json),
-        "Map": (None, Schema, map_from_json, map_to_json),
-    }
+class Symbol(object):
+    def __init__(self, param):
+        self.param = param
 
-    def __init__(self, json_schema):
-        self.json_schema = json_schema
-        self.type_name = json_schema["type"]
-
-        if self.type_name == "Schema":
-            self.from_json = lambda datum: self.__class__(datum)
-            self.to_json = lambda datum: datum.json_schema
-            return
-
-        wrap_schema, param_schema, fro, to = self.types[self.type_name]
-
-        if wrap_schema is not None:
-            wrap = self.__class__(wrap_schema)
+class String(Symbol):
+    pass
+class Boolean(Symbol):
+    pass
+class Schema(Symbol):
+    pass
+class Array(Symbol):
+    pass
+class Map(Symbol):
+    pass
+class OrderedMap(Symbol):
+    pass
+class Struct(Symbol):
+    def __init__(self, param):
+        if isinstance(param, OrderedDict):
+            self.param = param
         else:
-            wrap = None
+            self.param = OrderedDict(param)
 
-        if param_schema is not None:
-            param = self.__class__(param_schema).from_json(json_schema["param"])
-        else:
-            param = None
 
-        if param is None:
-            if wrap is None:
-                # Simple primitive
-                self.from_json = fro
-                self.to_json = to
-            else:
-                # Simple wrapper
-                self.from_json = lambda datum: fro(wrap.from_json(datum))
-                self.to_json = lambda datum: wrap.to_json(to(datum))
-        else:
-            if wrap is None:
-                # Parametrized primitive
-                self.from_json = lambda datum: fro(datum, param)
-                self.to_json = lambda datum: to(datum, param)
-            else:
-                # Parametrized wrapper
-                self.from_json = lambda datum: fro(wrap.from_json(datum), param)
-                self.to_json = lambda datum: wrap.to_json(to(datum, param))
+
+def from_json(schema, datum):
+    if schema == Boolean:
+        return boolean_from_json(datum)
+    elif schema == String:
+        return string_from_json(datum)
+    elif schema == Schema:
+        if datum["type"] == "Boolean":
+            return Boolean
+        elif datum["type"] == "String":
+            return String
+        elif datum["type"] == "Schema":
+            return Schema
+        elif datum["type"] == "Array":
+            param = from_json(Schema, datum["param"])
+            return Array(param)
+        elif datum["type"] == "Map":
+            param = from_json(Schema, datum["param"])
+            return Map(param)
+        elif datum["type"] == "OrderedMap":
+            param = from_json(Schema, datum["param"])
+            return OrderedMap(param)
+        elif datum["type"] == "Struct":
+            param = from_json(OrderedMap(Struct([
+                required("name", String),
+                required("schema", Schema),
+                required("required", Boolean)
+            ])), datum["param"])
+            return Struct(param)
+    elif schema.__class__ == Array:
+        return array_from_json(datum, schema.param, from_json)
+    elif schema.__class__ == Map:
+        return map_from_json(datum, schema.param, from_json)
+    elif schema.__class__ == OrderedMap:
+        datum = from_json(Struct([
+            required("map", Map(schema.param)),
+            required("order", Array(String)),
+        ]), datum)
+        return assemble_ordered_map(datum)
+    elif schema.__class__ == Struct:
+        return struct_from_json(datum, schema.param, from_json)
+
 
