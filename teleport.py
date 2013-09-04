@@ -50,6 +50,16 @@ def integer_from_json(datum):
         return int(datum)
     raise ValidationError("Invalid Integer", datum)
 
+def float_from_json(datum):
+    """If *datum* is a float, return it; if it is an integer, cast it to a
+    float and return it. Otherwise, raise a :exc:`ValidationError`.
+    """
+    if type(datum) == float:
+        return datum
+    if type(datum) == int:
+        return float(datum)
+    raise ValidationError("Invalid Float", datum)
+
 def string_from_json(datum):
     """If *datum* is of unicode type, return it. If it is a string, decode it
     as UTF-8 and return the result. Otherwise, raise a
@@ -74,31 +84,42 @@ def boolean_from_json(datum):
         return datum
     raise ValidationError("Invalid Boolean", datum)
 
+class Box(object):
+    """Used as a wrapper around JSON data to disambiguate None as a JSON value
+    (``null``) from None as an absense of value. Its :attr:`datum` attribute
+    will hold the actual JSON value.
 
+    For example, an HTTP request body may be empty in which case your function
+    may return ``None`` or it may be "null", in which case the function can
+    return a :class:`Box` instance with ``None`` inside.
+    """
+    def __init__(self, datum):
+        self.datum = datum
+
+def json_from_json(datum):
+    """Return the JSON value wrapped in a :class:`Box`.
+    """
+    return Box(datum)
+
+def json_to_json(datum):
+    return datum.datum
+
+def binary_from_json(datum):
+    """If *datum* is a base64-encoded string, decode and return it. If not a
+    string, or encoding is wrong, raise :exc:`ValidationError`.
+    """
+    if type(datum) in (str, unicode,):
+        try:
+            return base64.b64decode(datum)
+        except TypeError:
+            raise ValidationError("Invalid base64 encoding", datum)
+    raise ValidationError("Invalid Binary data", datum)
+
+def binary_to_json(datum):
+    "Encode *datum* using base64."
+    return base64.b64encode(datum)
 
 def ordered_map_stuff(param):
-
-    def assemble_ordered_map(datum):
-        """:exc:`ValidationError` is raised if *order* does not correspond to
-        the keys in *map*. The native form is Python's :class:`OrderedDict`.
-        """
-        order = datum["order"]
-        keys = datum["map"].keys()
-        if len(order) != len(keys) or set(order) != set(keys):
-            raise ValidationError("Invalid OrderedMap", datum)
-        # Turn into OrderedDict instance
-        ret = OrderedDict()
-        for key in order:
-            ret[key] = datum["map"][key]
-        return ret
-
-    return (Struct([
-        required("map", Map(param)),
-        required("order", Array(String)),
-    ]), assemble_ordered_map)
-
-
-def _ordered_map_stuff(param):
 
     def assemble_ordered_map(datum):
         """:exc:`ValidationError` is raised if *order* does not correspond to
@@ -234,10 +255,16 @@ class String(Symbol):
     type_name = "String"
 class Integer(Symbol):
     type_name = "Integer"
+class Float(Symbol):
+    type_name = "Float"
 class Boolean(Symbol):
     type_name = "Boolean"
 class Schema(Symbol):
     type_name = "Schema"
+class JSON(Symbol):
+    type_name = "JSON"
+class Binary(Symbol):
+    type_name = "Binary"
 class Array(Symbol):
     type_name = "Array"
 class Map(Symbol):
@@ -253,15 +280,18 @@ class Struct(Symbol):
             self.param = OrderedDict(param)
 
 basic_types = {
-    "Boolean": (Boolean, boolean_from_json),
-    "String": (String, string_from_json),
-    "Integer": (Integer, integer_from_json),
+    "Boolean": (Boolean, boolean_from_json, identity),
+    "String": (String, string_from_json, identity),
+    "Integer": (Integer, integer_from_json, identity),
+    "Float": (Float, float_from_json, identity),
+    "JSON": (JSON, json_from_json, json_to_json),
+    "Binary": (Binary, binary_from_json, binary_to_json),
 }
 
 parametrized_types = {
     "Array": (Array, Schema, array_stuff),
     "Map": (Map, Schema, map_stuff),
-    "OrderedMap": (OrderedMap, Schema, _ordered_map_stuff),
+    "OrderedMap": (OrderedMap, Schema, ordered_map_stuff),
     "Struct": (Struct, OrderedMap(Struct([
                     required("schema", Schema),
                     required("required", Boolean),
@@ -287,6 +317,13 @@ class Teleport(object):
             elif datum["type"] == "Schema":
                 return Schema
 
-from_json = Teleport().from_json
+    def to_json(self, schema, datum):
+        if schema.type_name in basic_types:
+            return basic_types[schema.type_name][2](datum)
+
+default = Teleport()
+
+from_json = default.from_json
+to_json = default.to_json
 
 

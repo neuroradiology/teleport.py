@@ -4,6 +4,86 @@ from copy import deepcopy
 
 from teleport import *
 
+
+## TEST PRIMITIVES
+
+class TestFloat(TestCase):
+
+    def test_from_json(self):
+        self.assertEqual(from_json(Float, 1), 1.0)
+        self.assertEqual(from_json(Float, 1.0), 1.0)
+        with self.assertRaisesRegexp(ValidationError, "Invalid Float"):
+            from_json(Float, True)
+
+    def test_to_json(self):
+        self.assertEqual(to_json(Float, 1.1), 1.1)
+
+
+class TestInteger(TestCase):
+
+    def test_from_json(self):
+        self.assertEqual(from_json(Integer, 1), 1)
+        self.assertEqual(from_json(Integer, 1.0), 1)
+        with self.assertRaisesRegexp(ValidationError, "Invalid Integer"):
+            from_json(Integer, 1.1)
+
+    def test_to_json(self):
+        self.assertEqual(to_json(Integer, 1), 1)
+
+
+class TestBoolean(TestCase):
+
+    def test_from_json(self):
+        self.assertEqual(from_json(Boolean, True), True)
+        with self.assertRaisesRegexp(ValidationError, "Invalid Boolean"):
+            from_json(Boolean, 0)
+
+    def test_to_json(self):
+        self.assertEqual(to_json(Boolean, True), True)
+
+
+class TestString(TestCase):
+
+    def test_string_okay(self):
+        self.assertEqual(from_json(String, u"omg"), u"omg")
+        self.assertEqual(from_json(String, "omg"), u"omg")
+
+    def test_string_fail(self):
+        with self.assertRaisesRegexp(ValidationError, "Invalid String"):
+            from_json(String, 0)
+        with self.assertRaisesRegexp(UnicodeDecodeValidationError, "invalid start byte"):
+            from_json(String, "\xff")
+
+    def test_to_json(self):
+        self.assertEqual(to_json(String, u"yo"), u"yo")
+
+
+class TestBinary(TestCase):
+
+    def test_from_json(self):
+        self.assertEqual(from_json(Binary, 'YWJj'), "abc")
+        self.assertEqual(from_json(Binary, u'YWJj'), "abc")
+        with self.assertRaisesRegexp(ValidationError, "Invalid base64"):
+            # Will complain about incorrect padding
+            from_json(Binary, "a")
+        with self.assertRaisesRegexp(ValidationError, "Invalid Binary"):
+            from_json(Binary, 1)
+
+    def test_to_json(self):
+        self.assertEqual(to_json(Binary, "abc"), "YWJj")
+
+
+class TestJSON(TestCase):
+
+    def test_from_json(self):
+        self.assertTrue(isinstance(from_json(JSON, "A string?"), Box))
+        self.assertEqual(from_json(JSON, 'ABC').datum, "ABC")
+
+    def test_to_json(self):
+        self.assertEqual(to_json(JSON, Box("abc")), "abc")
+
+## TEST PARAMETRIZED
+
 struct_schema_json = {
     "type": u"Struct",
     "param": {
@@ -38,27 +118,6 @@ class TestStruct(TestCase):
             from_json(struct_schema, {"foo": True, "barr": 2.0})
         with self.assertRaisesRegexp(ValidationError, "Missing fields"):
             from_json(struct_schema, {"bar": 2})
-
-class TestBoolean(TestCase):
-
-    def test_from_json(self):
-        self.assertEqual(from_json(Boolean, True), True)
-        with self.assertRaisesRegexp(ValidationError, "Invalid Boolean"):
-            from_json(Boolean, 0)
-
-
-class TestString(TestCase):
-
-    def test_string_okay(self):
-        self.assertEqual(from_json(String, u"omg"), u"omg")
-        self.assertEqual(from_json(String, "omg"), u"omg")
-
-    def test_string_fail(self):
-        with self.assertRaisesRegexp(ValidationError, "Invalid String"):
-            from_json(String, 0)
-        with self.assertRaisesRegexp(UnicodeDecodeValidationError, "invalid start byte"):
-            from_json(String, "\xff")
-
 
 class TestMap(TestCase):
 
