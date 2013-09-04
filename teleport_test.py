@@ -101,7 +101,38 @@ struct_schema_json = {
         "order": [u"foo", u"bar"]
     }
 }
+array_schema_json = {
+    "type": u"Array",
+    "param": {
+        "type": u"Boolean"
+    }
+}
+map_schema_json = {
+    "type": u"Map",
+    "param": {"type": "Boolean"}
+}
+ordered_map_schema_json = {
+    "type": u"OrderedMap",
+    "param": {"type": "Boolean"}
+}
 struct_schema = from_json(Schema, struct_schema_json)
+array_schema = from_json(Schema, array_schema_json)
+map_schema = from_json(Schema, map_schema_json)
+ordered_map_schema = from_json(Schema, ordered_map_schema_json)
+
+
+
+
+class TestArray(TestCase):
+
+    def test_from_json(self):
+        self.assertEqual(from_json(array_schema, [True, False]), [True, False])
+        self.assertEqual(to_json(array_schema, [True, False]), [True, False])
+        with self.assertRaisesRegexp(ValidationError, "Invalid Array"):
+            from_json(array_schema, ("no", "tuples",))
+        with self.assertRaisesRegexp(ValidationError, "Invalid Boolean"):
+            from_json(array_schema, [True, False, 1])
+
 
 class TestStruct(TestCase):
 
@@ -119,6 +150,13 @@ class TestStruct(TestCase):
         with self.assertRaisesRegexp(ValidationError, "Missing fields"):
             from_json(struct_schema, {"bar": 2})
 
+    def test_to_json(self):
+        res = to_json(struct_schema, {"foo": True})
+        self.assertEqual(res, {"foo": True})
+        res = to_json(struct_schema, {"foo": True, "bar": None})
+        self.assertEqual(res, {"foo": True})
+
+
 class TestMap(TestCase):
 
     def test_from_json_and_to_json(self):
@@ -127,8 +165,8 @@ class TestMap(TestCase):
             u"hip": False,
             u"groovy": True
         }
-        map_schema = Map(Boolean)
         self.assertEqual(from_json(map_schema, m), m)
+        self.assertEqual(to_json(map_schema, m), m)
         with self.assertRaisesRegexp(ValidationError, "Invalid Map"):
             from_json(map_schema, [True, False])
         with self.assertRaisesRegexp(ValidationError, "must be unicode"):
@@ -153,22 +191,15 @@ class TestOrderedMap(TestCase):
             (u"groovy", True,),
             (u"hip", False,)
         ])
-        s = OrderedMap(Boolean)
-        self.assertEqual(from_json(s, m), md)
+        self.assertEqual(from_json(ordered_map_schema, m), md)
+        self.assertEqual(to_json(ordered_map_schema, md), m)
 
         with self.assertRaisesRegexp(ValidationError, "Invalid OrderedMap"):
             m2 = deepcopy(m)
             m2["order"].append(u"cool")
-            from_json(s, m2)
+            from_json(ordered_map_schema, m2)
         with self.assertRaisesRegexp(ValidationError, "Invalid OrderedMap"):
             m2 = deepcopy(m)
             m2["order"] = [u"cool", u"groovy", u"kewl"]
-            from_json(s, m2)
-
-
-class TestArray(TestCase):
-
-    def test_array(self):
-        schema = Array(Boolean)
-        self.assertEqual(from_json(schema, [True]), [True])
+            from_json(ordered_map_schema, m2)
 

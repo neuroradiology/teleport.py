@@ -135,6 +135,12 @@ def ordered_map_stuff(param):
             ret[key] = datum["map"][key]
         return ret
 
+    def disassemble_ordered_map(datum):
+        return {
+            "map": dict(datum.items()),
+            "order": datum.keys()
+        }
+
     wrapper_schema = Struct([
         required("map", Map(param)),
         required("order", Array(String)),
@@ -143,7 +149,10 @@ def ordered_map_stuff(param):
     def ordered_map_from_json(datum, from_json):
         return assemble_ordered_map(from_json(wrapper_schema, datum))
 
-    return ordered_map_from_json
+    def ordered_map_to_json(datum, to_json):
+        return to_json(wrapper_schema, disassemble_ordered_map(datum))
+
+    return (ordered_map_from_json, ordered_map_to_json)
 
 
 def array_stuff(param):
@@ -165,7 +174,13 @@ def array_stuff(param):
             return ret
         raise ValidationError("Invalid Array", datum)
 
-    return array_from_json
+    def array_to_json(datum, to_json):
+        """Serialize each item in the *datum* iterable using *param*. Return
+        the resulting values in a list.
+        """
+        return [to_json(param, item) for item in datum]
+
+    return (array_from_json, array_to_json)
 
 def map_stuff(param):
 
@@ -187,7 +202,13 @@ def map_stuff(param):
             return ret
         raise ValidationError("Invalid Map", datum)
 
-    return map_from_json
+    def map_to_json(datum, to_json):
+        ret = {}
+        for key, val in datum.items():
+            ret[key] = to_json(param, val)
+        return ret
+
+    return (map_from_json, map_to_json)
 
 
 def struct_stuff(param):
@@ -229,7 +250,15 @@ def struct_stuff(param):
         else:
             raise ValidationError("Invalid Struct", datum)
 
-    return struct_from_json
+    def struct_to_json(datum, to_json):
+        ret = {}
+        for name, field in param.items():
+            schema = field['schema']
+            if name in datum.keys() and datum[name] != None:
+                ret[name] = to_json(schema, datum[name])
+        return ret
+
+    return (struct_from_json, struct_to_json)
 
 
 
@@ -305,7 +334,7 @@ class Teleport(object):
         if schema.type_name in basic_types:
             return basic_types[schema.type_name][1](datum)
         elif schema.type_name in parametrized_types:
-            _from_json = parametrized_types[schema.type_name][2](schema.param)
+            (_from_json, _) = parametrized_types[schema.type_name][2](schema.param)
             return _from_json(datum, self.from_json)
         elif schema == Schema:
             if datum["type"] in basic_types:
@@ -320,6 +349,9 @@ class Teleport(object):
     def to_json(self, schema, datum):
         if schema.type_name in basic_types:
             return basic_types[schema.type_name][2](datum)
+        elif schema.type_name in parametrized_types:
+            (_, _to_json) = parametrized_types[schema.type_name][2](schema.param)
+            return _to_json(datum, self.to_json)
 
 default = Teleport()
 
