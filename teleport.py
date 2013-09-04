@@ -35,6 +35,9 @@ class ValidationError(Exception):
             ret += ": %s" % repr(self.obj)
         return ret
 
+class UnknownTypeValidationError(ValidationError):
+    pass
+
 class UnicodeDecodeValidationError(ValidationError):
     pass
 
@@ -337,14 +340,23 @@ class Teleport(object):
             (_from_json, _) = parametrized_types[schema.type_name][2](schema.param)
             return _from_json(datum, self.from_json)
         elif schema == Schema:
-            if datum["type"] in basic_types:
-                return basic_types[datum["type"]][0]
-            elif datum["type"] in parametrized_types:
-                (schema, param_schema, stuff) = parametrized_types[datum['type']]
+            if type(datum) != dict or "type" not in datum.keys():
+                raise ValidationError("Invalid Schema", datum)
+            t = datum["type"]
+            if t in basic_types:
+                if "param" in datum:
+                    raise ValidationError("Unexpected param for %s schema" % t)
+                return basic_types[t][0]
+            elif t in parametrized_types:
+                if "param" not in datum:
+                    raise ValidationError("Missing param for %s schema" % t)
+                (schema, param_schema, stuff) = parametrized_types[t]
                 param = self.from_json(param_schema, datum['param'])
                 return schema(param)
-            elif datum["type"] == "Schema":
+            elif t == "Schema":
                 return Schema
+            else:
+                raise UnknownTypeValidationError("Unknown type", schema)
 
     def to_json(self, schema, datum):
         if schema.type_name in basic_types:
@@ -352,6 +364,17 @@ class Teleport(object):
         elif schema.type_name in parametrized_types:
             (_, _to_json) = parametrized_types[schema.type_name][2](schema.param)
             return _to_json(datum, self.to_json)
+        elif schema.type_name == "Schema":
+            if datum.type_name in basic_types or datum.type_name == "Schema":
+                return {"type": datum.type_name}
+            elif datum.type_name in parametrized_types:
+                (schema, param_schema, stuff) = parametrized_types[datum.type_name]
+                param = self.to_json(param_schema, datum.param)
+                return {
+                    "type": datum.type_name,
+                    "param": param
+                }
+
 
 default = Teleport()
 

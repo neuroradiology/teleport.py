@@ -115,11 +115,68 @@ ordered_map_schema_json = {
     "type": u"OrderedMap",
     "param": {"type": "Boolean"}
 }
+deep_schema_json = {
+    "type": u"Array",
+    "param": struct_schema_json
+}
 struct_schema = from_json(Schema, struct_schema_json)
 array_schema = from_json(Schema, array_schema_json)
 map_schema = from_json(Schema, map_schema_json)
 ordered_map_schema = from_json(Schema, ordered_map_schema_json)
+deep_schema = from_json(Schema, deep_schema_json)
 
+
+class TestSchema(TestCase):
+
+    def test_to_json_schema(self):
+        self.assertEqual(array_schema_json, to_json(Schema, array_schema))
+        self.assertEqual(struct_schema_json, to_json(Schema, struct_schema))
+        self.assertEqual(deep_schema_json, to_json(Schema, deep_schema))
+        struct_s = Struct([
+            required(u"foo", Boolean, u"Never gonna give you up"),
+            optional(u"bar", Integer)
+        ])
+        self.assertEqual(to_json(Schema, struct_s), struct_schema_json)
+
+    def test_schema_subclass_delegation(self):
+        self.assertEqual(from_json(Schema, {"type": u"Integer"}), Integer)
+        self.assertEqual(from_json(Schema, {"type": u"Float"}), Float)
+        self.assertEqual(from_json(Schema, {"type": u"Boolean"}), Boolean)
+        self.assertEqual(from_json(Schema, {"type": u"String"}), String)
+        self.assertEqual(from_json(Schema, {"type": u"Binary"}), Binary)
+        self.assertEqual(from_json(Schema, {"type": u"Schema"}), Schema)
+        self.assertEqual(from_json(Schema, {"type": u"JSON"}), JSON)
+
+    def test_schema_duplicate_fields(self):
+        s = deepcopy(struct_schema_json)
+        s["param"]["order"].append("blah")
+        with self.assertRaisesRegexp(ValidationError, "Invalid OrderedMap"):
+            from_json(Schema, s)
+
+    def test_schema_not_struct(self):
+        with self.assertRaisesRegexp(ValidationError, "Invalid Schema: True"):
+            from_json(Schema, True)
+
+    def test_schema_unknown_type(self):
+        with self.assertRaisesRegexp(UnknownTypeValidationError, "Unknown type"):
+            from_json(Schema, {"type": "number"})
+
+    def test_deep_schema_validation_stack(self):
+        # Test Python representatioon
+        with self.assertRaisesRegexp(ValidationError, "\[0\]\[u'bar'\]"):
+            from_json(deep_schema, [{"foo": True, "bar": False}])
+
+    def test_unexpected_param(self):
+        s = deepcopy(array_schema_json)
+        s["type"] = "Integer"
+        with self.assertRaisesRegexp(ValidationError, "Unexpected param"):
+            from_json(Schema, s)
+
+    def test_missing_param(self):
+        s = deepcopy(struct_schema_json)
+        del s["param"]
+        with self.assertRaisesRegexp(ValidationError, "Missing param"):
+            from_json(Schema, s)
 
 
 
