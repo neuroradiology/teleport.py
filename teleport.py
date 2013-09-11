@@ -453,21 +453,24 @@ class Schema(BasicPrimitive):
             return serializer
 
 
-Schema.types = {
-    "Integer": (Integer, None),
-    "Float": (Float, None),
-    "String": (String, None),
-    "Binary": (Binary, None),
-    "Boolean": (Boolean, None),
-    "Schema": (Schema, None),
-    "JSON": (JSON, None),
-    "Array": (Array, Schema),
-    "Map": (Map, Schema),
-    "OrderedMap": (OrderedMap, Schema),
-    "Struct": (Struct, OrderedMap(Struct([
-        required(u"schema", Schema),
-        required(u"required", Boolean),
-        optional(u"doc", String)
-    ])))
-}
+def standard_types(schema_cls):
+    return {
+        "Integer": (Integer, None),
+        "Float": (Float, None),
+        "String": (String, None),
+        "Binary": (Binary, None),
+        "Boolean": (Boolean, None),
+        "Schema": (schema_cls, None),
+        "JSON": (JSON, None),
+        "Array": (Array, schema_cls),
+        "Map": (Map, schema_cls),
+        "OrderedMap": (OrderedMap, schema_cls),
+        "Struct": (Struct, OrderedMap(Struct([
+            required(u"schema", schema_cls),
+            required(u"required", Boolean),
+            optional(u"doc", String)
+        ])))
+    }
+
+Schema.types = standard_types(Schema)
 

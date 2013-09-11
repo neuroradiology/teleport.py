@@ -281,10 +281,12 @@ class TestSuits(TestCase):
 
 
 class SuitSchema(Schema):
-    types = {
-        "Array": Schema.types["Array"],
-        "Suit": (Suit, None,)
-    }
+    pass
+
+SuitSchema.types = {
+    "Array": standard_types(SuitSchema)["Array"],
+    "Suit": (Suit, None,)
+}
 
 class TestTypeMap(TestCase):
 
